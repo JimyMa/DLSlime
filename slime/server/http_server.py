@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from slime.config import RDMAInfo
-from slime.transfer_engine.engine import TransferEngine
+from slime.transport.engine import TransferEngine
 
 from .server_args import ServerArgs
 

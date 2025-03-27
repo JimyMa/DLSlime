@@ -2,7 +2,7 @@ import asyncio
 import torch
 import time
 
-from slime.transfer_engine.engine import TransferEngine
+from slime.transport.engine import TransferEngine
 
 import argparse
 

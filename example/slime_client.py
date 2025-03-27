@@ -5,7 +5,7 @@ import requests
 
 import torch
 
-from slime.transfer_engine.context import RDMAContext
+from slime.transport.context import RDMAContext
 from slime.config import RDMAInfo
 from slime import _slime_c
 

@@ -38,6 +38,8 @@ DEFINE_uint64(buffer_size, 1ull << 30, "total size of data buffer");
 DEFINE_uint64(block_size, 32768, "block size");
 DEFINE_uint64(batch_size, 80, "batch size");
 
+DEFINE_uint64(duration, 10, "duration (s)");
+
 json mr_info;
 
 void* memory_allocate()
@@ -59,7 +61,6 @@ int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
     std::string exchange_message(static_cast<const char*>(remote_msg.data()), remote_msg.size());
 
     json exchange_info = json::parse(exchange_message);
-    std::cout << exchange_info.dump() << std::endl;
 
     rdma_context.modify_qp_to_rtsr(RDMAInfo(exchange_info["rdma_info"]));
     for (auto& item : exchange_info["mr_info"].items()) {
@@ -111,19 +112,42 @@ int initiator(RDMAContext& rdma_context)
 
     rdma_context.launch_cq_future();
 
-    std::vector<uintptr_t> target_offsets, source_offsets;
+    // 新增变量：统计相关
+    uint64_t total_bytes = 0;
+    uint64_t total_trips = 0;
+    size_t step = 0;
+    auto start_time = std::chrono::steady_clock::now();
+    auto deadline = start_time + std::chrono::seconds(FLAGS_duration);
+    
+    while (std::chrono::steady_clock::now() < deadline) {
 
-    for (int i = 0; i < FLAGS_batch_size; ++i) {
-        source_offsets.emplace_back(i * FLAGS_block_size);
-        target_offsets.emplace_back(i * FLAGS_block_size);
+        std::vector<uintptr_t> target_offsets, source_offsets;
+
+        for (int i = 0; i < FLAGS_batch_size; ++i) {
+            source_offsets.emplace_back(i * FLAGS_block_size);
+            target_offsets.emplace_back(i * FLAGS_block_size);
+        }
+
+        int done = false;
+        rdma_context.batch_r_rdma_async(target_offsets, source_offsets, FLAGS_block_size, "buffer", [&done] (int code) {done=true;});
+
+        while (!done) {}
+        total_bytes += FLAGS_batch_size * FLAGS_block_size;
+        total_trips += 1;
     }
 
-    int done = false;
-    rdma_context.batch_r_rdma_async(target_offsets, source_offsets, FLAGS_block_size, "buffer", [&done] (int code) {done=true;});
+    auto end_time = std::chrono::steady_clock::now();
+    double duration = std::chrono::duration<double>(end_time - start_time).count();
+    double throughput = total_bytes / duration / (1 << 20); // MB/s
 
-    while (!done) {}
+    std::cout << "Batch size        : " << FLAGS_batch_size << std::endl;
+    std::cout << "Block size        : " << FLAGS_block_size << std::endl;
 
-    int signal = 1;
+    std::cout << "Total trips       : " << total_trips << std::endl;
+    std::cout << "Total transferred : " << total_bytes / (1 << 20) << " MiB" << std::endl;
+    std::cout << "Duration          : " << duration << " seconds" << std::endl;
+    std::cout << "Throughput        : " << throughput << " MiB/s" << std::endl;
+
     zmq::message_t term_msg("TERMINATE");
     send.send(term_msg, zmq::send_flags::none);
 

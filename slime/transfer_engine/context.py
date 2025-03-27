@@ -5,12 +5,13 @@ from slime import _slime_c
 
 
 class RDMAContext:
+    """RDMA Context Wrapper."""
 
     def __init__(
         self,
         dev_name: str,
         ib_port: int = 1,
-        link_type: str = 'Ethernet',
+        link_type: str = "Ethernet",
     ):
         self._rdma_context_c = _slime_c.rdma_context()
         self.init_rdma_context(dev_name, ib_port, link_type)
@@ -23,7 +24,7 @@ class RDMAContext:
         self,
         dev_name: str,
         ib_port: int = 1,
-        link_type: str = 'Ethernet',
+        link_type: str = "Ethernet",
     ) -> int:
         return self._rdma_context_c.init_rdma_context(dev_name, ib_port, link_type)
 

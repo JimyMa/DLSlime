@@ -2,8 +2,7 @@
 
 ## Benchmark
 
-- in H800 with NIC ("mlx5_bond_0"), RoCE v2.
-
+- Cross node performance in H800 with NIC ("mlx5_bond_0"), RoCE v2.
 
 ```
 Batch size        : 160

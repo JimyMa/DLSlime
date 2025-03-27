@@ -146,6 +146,7 @@ int initiator(RDMAContext& rdma_context)
     std::cout << "Total trips       : " << total_trips << std::endl;
     std::cout << "Total transferred : " << total_bytes / (1 << 20) << " MiB" << std::endl;
     std::cout << "Duration          : " << duration << " seconds" << std::endl;
+    std::cout << "Average Latency   : " << duration / total_trips * 1000 << " ms/trip" << std::endl;
     std::cout << "Throughput        : " << throughput << " MiB/s" << std::endl;
 
     zmq::message_t term_msg("TERMINATE");

@@ -5,14 +5,14 @@
 
 #include <cassert>
 #include <chrono>
-#include <future>
-#include <thread>
-#include <mutex>
 #include <condition_variable>
+#include <future>
 #include <gflags/gflags.h>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <sys/time.h>
+#include <thread>
 #include <unistd.h>
 #include <unordered_map>
 #include <zmq.h>
@@ -115,10 +115,10 @@ int initiator(RDMAContext& rdma_context)
     // 新增变量：统计相关
     uint64_t total_bytes = 0;
     uint64_t total_trips = 0;
-    size_t step = 0;
-    auto start_time = std::chrono::steady_clock::now();
-    auto deadline = start_time + std::chrono::seconds(FLAGS_duration);
-    
+    size_t   step        = 0;
+    auto     start_time  = std::chrono::steady_clock::now();
+    auto     deadline    = start_time + std::chrono::seconds(FLAGS_duration);
+
     while (std::chrono::steady_clock::now() < deadline) {
 
         std::vector<uintptr_t> target_offsets, source_offsets;
@@ -129,16 +129,17 @@ int initiator(RDMAContext& rdma_context)
         }
 
         int done = false;
-        rdma_context.batch_r_rdma_async(target_offsets, source_offsets, FLAGS_block_size, "buffer", [&done] (int code) {done=true;});
+        rdma_context.batch_r_rdma_async(
+            target_offsets, source_offsets, FLAGS_block_size, "buffer", [&done](int code) { done = true; });
 
         while (!done) {}
         total_bytes += FLAGS_batch_size * FLAGS_block_size;
         total_trips += 1;
     }
 
-    auto end_time = std::chrono::steady_clock::now();
-    double duration = std::chrono::duration<double>(end_time - start_time).count();
-    double throughput = total_bytes / duration / (1 << 20); // MB/s
+    auto   end_time   = std::chrono::steady_clock::now();
+    double duration   = std::chrono::duration<double>(end_time - start_time).count();
+    double throughput = total_bytes / duration / (1 << 20);  // MB/s
 
     std::cout << "Batch size        : " << FLAGS_batch_size << std::endl;
     std::cout << "Block size        : " << FLAGS_block_size << std::endl;

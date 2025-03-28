@@ -1,6 +1,41 @@
 # Slime Transfer Engine
 
+## Build
+
+``` bash
+# on CentOS
+sudo yum install cppzmq-devel gflags-devel  cmake 
+
+# on Ubuntu
+sudo apt install libzmq-dev libgflags-dev cmake
+
+# build from source
+mkdir build; cd build
+cmake -DBUILD_BENCH=ON -DBUILD_PYTHON=ON ..; make
+```
+
 ## Benchmark
+
+``` bash
+# Target
+./bench/transfer_bench                \
+  --remote-endpoint=10.130.8.138:8000 \
+  --local-endpoint=10.130.8.139:8000  \
+  --device-name="mlx5_bond_0"         \
+  --mode target                       \
+  --block-size=2048000                \
+  --batch-size=160
+
+# Initiator
+./bench/transfer_bench                \
+  --remote-endpoint=10.130.8.139:8000 \ 
+  --local-endpoint=10.130.8.138:8000  \ 
+  --device-name="mlx5_bond_0"         \
+  --mode initiator                    \
+  --block-size=16384                  \
+  --batch-size=16                     \
+  --duration 10
+```
 
 - Cross node performance in H800 with NIC ("mlx5_bond_0"), RoCE v2.
 

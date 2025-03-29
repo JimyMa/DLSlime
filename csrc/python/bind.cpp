@@ -4,6 +4,7 @@
 #include "ops/ops.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
+#include "utils/utils.h"
 
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
@@ -45,6 +46,8 @@ PYBIND11_MODULE(_slime_c, m)
              &slime::RDMAContext::batch_r_rdma_async,
              py::call_guard<py::gil_scoped_release>(),
              "Read remote memory asynchronously");
+
+    m.def("avaliable_nic", &slime::avaliable_nic);
 
     m.def("gather", &slime::gather);
     m.def("scatter", &slime::scatter);

@@ -34,13 +34,13 @@ public:
     int64_t modify_qp_to_rtsr(RDMAInfo remote_rdma_info);
 
     /* Memory Allocation */
-    int64_t register_memory(std::string mr_key, uintptr_t data_ptr, size_t length)
+    int64_t register_memory_region(std::string mr_key, uintptr_t data_ptr, size_t length)
     {
         memory_pool_.register_memory_region(mr_key, data_ptr, length);
         return 0;
     }
 
-    int64_t register_remote_memory(std::string mr_key, json mr_info)
+    int64_t register_remote_memory_region(std::string mr_key, json mr_info)
     {
         memory_pool_.register_remote_memory_region(mr_key, mr_info);
         return 0;
@@ -74,7 +74,7 @@ public:
         return remote_rdma_info_;
     }
 
-    json exchange_info()
+    json local_info()
     {
         return json{{"rdma_info", local_rdma_info_.to_json()}, {"mr_info", memory_pool_.mr_info()}};
     }

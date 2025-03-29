@@ -40,7 +40,7 @@ class RDMAEndpoint:
             - 'lid': Local ID (InfiniBand only)
             - 'port_num': Bound port number
         """
-        return self._ctx.exchange_info()
+        return self._ctx.local_info()
 
     def initialize_endpoint(
         self,
@@ -84,7 +84,20 @@ class RDMAEndpoint:
             virtual_address: Starting VA of the memory block
             length_bytes: Size of the region in bytes
         """
-        self._ctx.register_memory(mr_identifier, virtual_address, length_bytes)
+        self._ctx.register_memory_region(mr_identifier, virtual_address, length_bytes)
+    
+    def register_remote_memory_region(
+        self,
+        remote_mr_info: str
+    ) -> None:
+        """Register a Remote Memory Region (MR) for RDMA operations.
+        
+        Args:
+            remote_mr_info:
+                - key: mr_key
+                - value: mr_info
+        """
+        self._ctx.register_remote_memory_region(remote_mr_info)
 
     async def async_read_batch(
         self,

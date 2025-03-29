@@ -1,4 +1,3 @@
-# Import required libraries
 import asyncio  # For asynchronous operations
 import torch    # For GPU tensor management
 
@@ -22,14 +21,13 @@ initiator.register_memory_region(
 
 # Initialize target endpoint on different NIC
 target = RDMAEndpoint(
-    device_name="mlx5_bond_1", 
+    device_name="mlx5_bond_1",
     ib_port=1,
     link_type="Ethernet"
 )
 
 # Create a one-initialized CUDA tensor on GPU 1 as remote buffer
 remote_tensor = torch.ones([16], device="cuda:1", dtype=torch.uint8)
-
 # Register target's GPU memory
 target.register_memory_region(
     mr_identifier="buffer",

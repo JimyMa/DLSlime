@@ -51,20 +51,20 @@ void* memory_allocate()
 
 int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
 {
-    json local_info = rdma_context.exchange_info();
+    json local_info = rdma_context.local_info();
 
     zmq::message_t local_msg(local_info.dump());
     send.send(local_msg, zmq::send_flags::none);
 
     zmq::message_t remote_msg;
     recv.recv(remote_msg, zmq::recv_flags::none);
-    std::string exchange_message(static_cast<const char*>(remote_msg.data()), remote_msg.size());
+    std::string remote_msg_str(static_cast<const char*>(remote_msg.data()), remote_msg.size());
 
-    json exchange_info = json::parse(exchange_message);
+    json remote_info = json::parse(remote_msg_str);
 
-    rdma_context.modify_qp_to_rtsr(RDMAInfo(exchange_info["rdma_info"]));
-    for (auto& item : exchange_info["mr_info"].items()) {
-        rdma_context.register_remote_memory(item.key(), item.value());
+    rdma_context.modify_qp_to_rtsr(RDMAInfo(remote_info["rdma_info"]));
+    for (auto& item : remote_info["mr_info"].items()) {
+        rdma_context.register_remote_memory_region(item.key(), item.value());
     }
 
     return 0;
@@ -82,7 +82,7 @@ int target(RDMAContext& rdma_context)
     rdma_context.init_rdma_context(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
     void* data = memory_allocate();
-    rdma_context.register_memory("buffer", (uintptr_t)data, FLAGS_buffer_size);
+    rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
 
     SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
 
@@ -106,7 +106,7 @@ int initiator(RDMAContext& rdma_context)
     rdma_context.init_rdma_context(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
     void* data = memory_allocate();
-    rdma_context.register_memory("buffer", (uintptr_t)data, FLAGS_buffer_size);
+    rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
 
     SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
 

@@ -31,7 +31,7 @@ public:
     int64_t init_rdma_context(std::string dev_name, uint8_t ib_port, std::string link_type);
 
     /* RDMA Info Exchange */
-    void modify_qp_to_rtsr(RDMAInfo remote_rdma_info);
+    int64_t modify_qp_to_rtsr(RDMAInfo remote_rdma_info);
 
     /* Memory Allocation */
     int64_t register_memory(std::string mr_key, uintptr_t data_ptr, size_t length)
@@ -60,7 +60,7 @@ public:
                                std::function<void(unsigned int)> callback);
 
     /* Completion Queue Polling */
-    void cq_poll_handle();
+    int64_t cq_poll_handle();
 
     void launch_cq_future();
     void stop_cq_future();
@@ -83,7 +83,7 @@ private:
     std::string device_name_ = "";
 
     /* RDMA Configuration */
-    struct ibv_context*      ib_ctx_;
+    struct ibv_context*      ib_ctx_       = nullptr;
     struct ibv_pd*           pd_           = nullptr;
     struct ibv_comp_channel* comp_channel_ = nullptr;
     struct ibv_cq*           cq_           = nullptr;

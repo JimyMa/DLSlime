@@ -68,24 +68,30 @@ void RDMAContext::stop_cq_future()
     }
 }
 
-void RDMAContext::cq_poll_handle()
+int64_t RDMAContext::cq_poll_handle()
 {
     SLIME_LOG_INFO("Polling CQ");
 
-    SLIME_ASSERT(connected_, "Please construct first");
-    SLIME_ASSERT(comp_channel_ != NULL, "comp_channel_ should be constructed");
+    if (!connected_) {
+        SLIME_LOG_ERROR("Start CQ handle before connected, please construct first");
+        return -1;
+    }
+    if (comp_channel_ == NULL)
+        SLIME_LOG_ERROR("comp_channel_ should be constructed");
 
     while (!stop_) {
         struct ibv_cq* ev_cq;
         void*          cq_context;
 
         if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
-            SLIME_ABORT("Failed to get CQ event");
+            SLIME_LOG_ERROR("Failed to get CQ event");
+            return -1;
         }
 
         ibv_ack_cq_events(ev_cq, 1);
         if (ibv_req_notify_cq(ev_cq, 0) != 0) {
-            SLIME_ABORT("Failed to request CQ notification");
+            SLIME_LOG_ERROR("Failed to request CQ notification");
+            return -1;
         }
 
         struct ibv_wc wc[POLL_COUNT];
@@ -109,11 +115,12 @@ void RDMAContext::cq_poll_handle()
                     }
                 }
                 else {
-                    std::cerr << "RDMA READ failed with status: " << ibv_wc_status_str(wc[i].status) << std::endl;
+                    SLIME_LOG_ERROR("RDMA READ failed with status: " << ibv_wc_status_str(wc[i].status) << std::endl);
                 }
             }
         }
     }
+    return 0;
 }
 
 int64_t RDMAContext::batch_r_rdma_async(const std::vector<uint64_t>&      target_offsets,
@@ -158,7 +165,7 @@ int64_t RDMAContext::batch_r_rdma_async(const std::vector<uint64_t>&      target
     delete[] sge;
 
     if (ret) {
-        SLIME_ABORT("Failed to post RDMA send : " << strerror(ret));
+        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
         return -1;
     }
 
@@ -201,14 +208,14 @@ int64_t RDMAContext::r_rdma_async(uintptr_t                         target_offse
     }
 
     if (ret) {
-        SLIME_ABORT("Failed to post RDMA send : " << strerror(ret));
+        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
         return -1;
     }
 
     return 0;
 }
 
-void RDMAContext::modify_qp_to_rtsr(RDMAInfo remote_rdma_info)
+int64_t RDMAContext::modify_qp_to_rtsr(RDMAInfo remote_rdma_info)
 {
     int                ret;
     struct ibv_qp_attr attr = {};
@@ -248,7 +255,8 @@ void RDMAContext::modify_qp_to_rtsr(RDMAInfo remote_rdma_info)
 
     ret = ibv_modify_qp(qp_, &attr, flags);
     if (ret) {
-        SLIME_ABORT("Failed to modify QP to RTR: reason: " << strerror(ret));
+        SLIME_LOG_ERROR("Failed to modify QP to RTR: reason: " << strerror(ret));
+        return -1;
     }
 
     // Modify QP to RTS state
@@ -265,14 +273,17 @@ void RDMAContext::modify_qp_to_rtsr(RDMAInfo remote_rdma_info)
 
     ret = ibv_modify_qp(qp_, &attr, flags);
     if (ret) {
-        SLIME_ABORT("Failed to modify QP to RTS");
+        SLIME_LOG_ERROR("Failed to modify QP to RTS");
+        return -1;
     }
     SLIME_LOG_INFO("RDMA exchange done");
     connected_ = true;
 
     if (ibv_req_notify_cq(cq_, 0)) {
-        SLIME_ABORT("Failed to request notify for CQ");
+        SLIME_LOG_ERROR("Failed to request notify for CQ");
+        return -1;
     }
+    return 0;
 }
 
 int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, std::string link_type)
@@ -283,7 +294,10 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
     int64_t       gidx;
     uint32_t      psn;
 
-    SLIME_ASSERT(!initialized_, "allready initialized.");
+    if (initialized_) {
+        SLIME_LOG_ERROR("allready initialized.");
+        return -1;
+    }
 
     /* Get RDMA Device Info */
     struct ibv_device** dev_list;
@@ -291,7 +305,7 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
     int                 num_devices;
     dev_list = ibv_get_device_list(&num_devices);
     if (!dev_list) {
-        SLIME_ABORT("Failed to get RDMA devices list");
+        SLIME_LOG_ERROR("Failed to get RDMA devices list");
         return -1;
     }
 
@@ -306,19 +320,19 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
     }
 
     if (!ib_ctx_) {
-        SLIME_LOG_INFO("Can't find or failed to open the specified device, try to open "
+        SLIME_LOG_WARN("Can't find or failed to open the specified device, try to open "
                        "the default device "
                        << (char*)ibv_get_device_name(dev_list[0]));
         ib_ctx_ = ibv_open_device(dev_list[0]);
         if (!ib_ctx_) {
-            SLIME_ABORT("Failed to open the default device");
+            SLIME_LOG_ERROR("Failed to open the default device");
             return -1;
         }
     }
 
-    SLIME_LOG_INFO("Get NIC:" << dev_name);
     struct ibv_device_attr device_attr;
-    SLIME_ASSERT_EQ(ibv_query_device(ib_ctx_, &device_attr), 0, "Failed to query device");
+    if (ibv_query_device(ib_ctx_, &device_attr) != 0)
+        SLIME_LOG_ERROR("Failed to query device");
     SLIME_LOG_INFO("Max Memory Region:" << device_attr.max_mr);
     SLIME_LOG_INFO("Max Memory Region Size:" << device_attr.max_mr_size);
     SLIME_LOG_INFO("Max Memory QP WR:" << device_attr.max_qp_wr);
@@ -326,12 +340,12 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
     struct ibv_port_attr port_attr;
     ib_port_ = ib_port;
     if (ibv_query_port(ib_ctx_, ib_port, &port_attr)) {
-        SLIME_ABORT("Unable to query port {} attributes\n" << ib_port_);
+        SLIME_LOG_ERROR("Unable to query port {} attributes\n" << ib_port_);
         return -1;
     }
     if ((port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND && link_type == "Ethernet")
         || (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET && link_type == "IB")) {
-        SLIME_ABORT("port link layer and config link type don't match");
+        SLIME_LOG_ERROR("port link layer and config link type don't match");
         return -1;
     }
     if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
@@ -340,7 +354,7 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
     else {
         gidx = ibv_find_sgid_type(ib_ctx_, ib_port_, IBV_GID_TYPE_ROCE_V2, AF_INET);
         if (gidx < 0) {
-            SLIME_ABORT("Failed to find GID");
+            SLIME_LOG_ERROR("Failed to find GID");
             return -1;
         }
     }
@@ -351,7 +365,7 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
     /* Alloc Protected Domain (PD) */
     pd_ = ibv_alloc_pd(ib_ctx_);
     if (!pd_) {
-        SLIME_ABORT("Failed to allocate PD");
+        SLIME_LOG_ERROR("Failed to allocate PD");
         return -1;
     }
     memory_pool_ = MemoryPool(pd_);
@@ -375,7 +389,7 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
 
     qp_ = ibv_create_qp(pd_, &qp_init_attr);
     if (!qp_) {
-        SLIME_ABORT("Failed to create QP");
+        SLIME_LOG_ERROR("Failed to create QP");
         return -1;
     }
 
@@ -391,7 +405,7 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
 
     int ret = ibv_modify_qp(qp_, &attr, flags);
     if (ret) {
-        SLIME_ABORT("Failed to modify QP to INIT");
+        SLIME_LOG_ERROR("Failed to modify QP to INIT");
     }
 
     /* Set Packet Sequence Number (PSN) */
@@ -400,7 +414,7 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
 
     /* Get GID */
     if (gidx != -1 && ibv_query_gid(ib_ctx_, 1, gidx, &gid)) {
-        SLIME_ABORT("Failed to get GID");
+        SLIME_LOG_ERROR("Failed to get GID");
     }
 
     /* Set Local RDMA Info */

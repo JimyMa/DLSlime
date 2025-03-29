@@ -72,8 +72,6 @@ inline int get_log_level()
         abort();                                                                                                       \
     }
 
-#define SLIME_ERROR(Msg, ...) SLIME_ABORT(Msg, __VA_ARGS__)
-
 #define SLIME_LOG_LEVEL(MsgType, Level, ...)                                                                           \
     {                                                                                                                  \
         if (get_log_level() >= Level) {                                                                                \
@@ -84,8 +82,12 @@ inline int get_log_level()
         }                                                                                                              \
     }
 
+// Error and Warn
+#define SLIME_LOG_ERROR(...) SLIME_LOG_LEVEL("Error", 0, __VA_ARGS__)
+#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("Warn", 0, __VA_ARGS__)
+
+// Info
 #define SLIME_LOG_INFO(...) SLIME_LOG_LEVEL("Info", 1, __VA_ARGS__)
 
+// Debug
 #define SLIME_LOG_DEBUG(...) SLIME_LOG_LEVEL("Debug", 2, __VA_ARGS__)
-
-#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("Warn", 3, __VA_ARGS__)

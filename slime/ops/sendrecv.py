@@ -7,7 +7,7 @@ import torch
 
 import zmq
 
-from slime.transport.context import RDMAContext
+from slime.transport.rdma_endpoint import RDMAContext
 
 
 class TransferEngine:

@@ -25,7 +25,7 @@ public:
     */
     RDMAContext() {}
 
-    ~RDMAContext() {}
+    ~RDMAContext();
 
     /* Initialize */
     int64_t init_rdma_context(std::string dev_name, uint8_t ib_port, std::string link_type);

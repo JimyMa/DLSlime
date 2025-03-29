@@ -1,5 +1,5 @@
-#include "engine/memory_pool.h"
 #include "engine/rdma_transport.h"
+#include "engine/memory_pool.h"
 #include "utils/ibv_helper.h"
 #include "utils/logging.h"
 #include "utils/utils.h"
@@ -26,6 +26,11 @@ namespace slime {
 #define MAX_RECV_WR 8192
 
 #define POLL_COUNT 64
+
+RDMAContext::~RDMAContext()
+{
+    stop_cq_future();
+}
 
 void RDMAContext::launch_cq_future()
 {

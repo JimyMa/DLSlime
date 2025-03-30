@@ -11,7 +11,7 @@ std::vector<std::string> avaliable_nic()
 
     dev_list = ibv_get_device_list(&num_devices);
     if (!dev_list) {
-        SLIME_LOG_ERROR("Failed to get RDMA devices list");
+        SLIME_LOG_DEBUG("No RDMA devices");
         return {};
     }
 

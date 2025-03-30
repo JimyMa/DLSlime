@@ -1,4 +1,5 @@
 #include "engine/rdma_transport.h"
+#include "engine/config.h"
 #include "engine/memory_pool.h"
 #include "utils/ibv_helper.h"
 #include "utils/logging.h"
@@ -102,20 +103,28 @@ int64_t RDMAContext::cq_poll_handle()
                 continue;
             }
             for (size_t i = 0; i < nr_poll; ++i) {
+                int64_t status_code;
                 if (wc[i].status == IBV_WC_SUCCESS) {
-                    SLIME_LOG_INFO("RDMA READ completed successfully.");
-                    if (wc[i].wr_id != 0) {
-                        wr_info_base* ptr = reinterpret_cast<wr_info_base*>(wc[i].wr_id);
-                        if (ptr->get_wr_type() == WrType::RDMA_READ_ACK) {
-                            SLIME_LOG_DEBUG("read cache done: Received IMM, imm_data: " << wc[i].imm_data);
-                            auto* info = reinterpret_cast<read_info*>(ptr);
-                            info->callback(wc[i].imm_data);
-                            delete info;
-                        }
-                    }
+                    SLIME_LOG_INFO("WR completed successfully.");
+                    status_code = 200;
                 }
                 else {
-                    SLIME_LOG_ERROR("RDMA READ failed with status: " << ibv_wc_status_str(wc[i].status) << std::endl);
+                    SLIME_LOG_ERROR("WR failed with status: " << ibv_wc_status_str(wc[i].status) << std::endl);
+                    status_code = wc[i].status;
+                }
+                if (wc[i].wr_id != 0) {
+                    wr_info_base* ptr  = reinterpret_cast<wr_info_base*>(wc[i].wr_id);
+                    auto*         info = reinterpret_cast<read_info*>(ptr);
+                    switch (WrType wr_type = ptr->get_wr_type()) {
+                        case WrType::RDMA_SEND_ACK:
+                        case WrType::RDMA_RECV_ACK:
+                        case WrType::RDMA_READ_ACK:
+                            info->callback(wc[i].imm_data);
+                            break;
+                        default:
+                            SLIME_ABORT("Unimplemented WrType " << int64_t(wr_type));
+                    }
+                    delete info;
                 }
             }
         }
@@ -123,13 +132,130 @@ int64_t RDMAContext::cq_poll_handle()
     return 0;
 }
 
-int64_t RDMAContext::batch_r_rdma_async(const std::vector<uint64_t>&      target_offsets,
-                                        const std::vector<uint64_t>&      source_offsets,
-                                        uint64_t                          length,
-                                        std::string                       mr_key,
-                                        std::function<void(unsigned int)> callback)
+int64_t
+RDMAContext::send_async(std::string mr_key, uint64_t offset, uint64_t length, std::function<void(int64_t)> callback)
 {
-    auto*  call_back_info = new read_info([callback](unsigned int code) { callback(code); });
+    send_info* callback_info = new send_info(callback);
+
+    int ret;
+
+    struct ibv_mr* mr        = memory_pool_.get_mr(mr_key);
+    json           remote_mr = memory_pool_.get_remote_mr(mr_key);
+
+    struct ibv_sge sge;
+    memset(&sge, 0, sizeof(sge));
+    sge.addr   = (uintptr_t)mr->addr + offset;
+    sge.length = length;
+    sge.lkey   = mr->lkey;
+
+    struct ibv_send_wr wr, *bad_wr = NULL;
+    memset(&wr, 0, sizeof(wr));
+
+    wr.wr_id      = (uintptr_t)callback_info;
+    wr.opcode     = IBV_WR_SEND;
+    wr.sg_list    = &sge;
+    wr.num_sge    = 1;
+    wr.send_flags = IBV_SEND_SIGNALED;
+
+    {
+        std::unique_lock<std::mutex> lock(rdma_post_send_mutex_);
+        ret = ibv_post_send(qp_, &wr, &bad_wr);
+    }
+
+    if (ret) {
+        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
+        return -1;
+    }
+
+    return 0;
+}
+
+int64_t
+RDMAContext::recv_async(std::string mr_key, uint64_t offset, uint64_t length, std::function<void(int64_t)> callback)
+{
+    recv_info* callback_info = new recv_info(callback);
+
+    int ret;
+
+    struct ibv_mr* mr        = memory_pool_.get_mr(mr_key);
+    json           remote_mr = memory_pool_.get_remote_mr(mr_key);
+
+    struct ibv_sge sge;
+    memset(&sge, 0, sizeof(sge));
+    sge.addr   = (uintptr_t)mr->addr + offset;
+    sge.length = length;
+    sge.lkey   = mr->lkey;
+
+    struct ibv_recv_wr wr, *bad_wr = NULL;
+    memset(&wr, 0, sizeof(wr));
+
+    wr.wr_id   = (uintptr_t)callback_info;
+    wr.sg_list = &sge;
+    wr.num_sge = 1;
+
+    {
+        std::unique_lock<std::mutex> lock(rdma_post_send_mutex_);
+        ret = ibv_post_recv(qp_, &wr, &bad_wr);
+    }
+
+    if (ret) {
+        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
+        return -1;
+    }
+
+    return 0;
+}
+
+int64_t RDMAContext::r_rdma_async(std::string                  mr_key,
+                                  uintptr_t                    target_offset,
+                                  uintptr_t                    source_offset,
+                                  uint64_t                     length,
+                                  std::function<void(int64_t)> callback)
+{
+    read_info* callback_info = new read_info([callback](unsigned int code) { callback(code); });
+
+    int ret;
+
+    struct ibv_mr* mr        = memory_pool_.get_mr(mr_key);
+    json           remote_mr = memory_pool_.get_remote_mr(mr_key);
+
+    struct ibv_sge sge;
+    memset(&sge, 0, sizeof(sge));
+    sge.addr   = (uintptr_t)mr->addr + source_offset;
+    sge.length = length;
+    sge.lkey   = mr->lkey;
+
+    struct ibv_send_wr wr, *bad_wr = NULL;
+    memset(&wr, 0, sizeof(wr));
+
+    wr.wr_id               = (uintptr_t)callback_info;
+    wr.opcode              = IBV_WR_RDMA_READ;
+    wr.sg_list             = &sge;
+    wr.num_sge             = 1;
+    wr.send_flags          = IBV_SEND_SIGNALED;
+    wr.wr.rdma.remote_addr = remote_mr["addr"].get<uint64_t>() + target_offset;
+    wr.wr.rdma.rkey        = remote_mr["rkey"].get<uint32_t>();
+
+    {
+        std::unique_lock<std::mutex> lock(rdma_post_send_mutex_);
+        ret = ibv_post_send(qp_, &wr, &bad_wr);
+    }
+
+    if (ret) {
+        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
+        return -1;
+    }
+
+    return 0;
+}
+
+int64_t RDMAContext::batch_r_rdma_async(std::string                  mr_key,
+                                        const std::vector<uint64_t>& target_offsets,
+                                        const std::vector<uint64_t>& source_offsets,
+                                        uint64_t                     length,
+                                        std::function<void(int64_t)> callback)
+{
+    auto*  call_back_info = new read_info(callback);
     size_t batch_size     = target_offsets.size();
 
     struct ibv_send_wr* bad_wr      = NULL;
@@ -163,49 +289,6 @@ int64_t RDMAContext::batch_r_rdma_async(const std::vector<uint64_t>&      target
 
     delete[] wr;
     delete[] sge;
-
-    if (ret) {
-        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
-        return -1;
-    }
-
-    return 0;
-}
-
-int64_t RDMAContext::r_rdma_async(uintptr_t                         target_offset,
-                                  uintptr_t                         source_offset,
-                                  uint64_t                          length,
-                                  std::string                       mr_key,
-                                  std::function<void(unsigned int)> callback)
-{
-    auto* call_back_info = new read_info([callback](unsigned int code) { callback(code); });
-
-    int ret;
-
-    struct ibv_mr* mr        = memory_pool_.get_mr(mr_key);
-    json           remote_mr = memory_pool_.get_remote_mr(mr_key);
-
-    struct ibv_sge sge;
-    memset(&sge, 0, sizeof(sge));
-    sge.addr   = (uintptr_t)mr->addr + source_offset;
-    sge.length = length;
-    sge.lkey   = mr->lkey;
-
-    struct ibv_send_wr wr, *bad_wr = NULL;
-    memset(&wr, 0, sizeof(wr));
-
-    wr.wr_id               = (uintptr_t)call_back_info;
-    wr.opcode              = IBV_WR_RDMA_READ;
-    wr.sg_list             = &sge;
-    wr.num_sge             = 1;
-    wr.send_flags          = IBV_SEND_SIGNALED;
-    wr.wr.rdma.remote_addr = remote_mr["addr"].get<uint64_t>() + target_offset;
-    wr.wr.rdma.rkey        = remote_mr["rkey"].get<uint32_t>();
-
-    {
-        std::unique_lock<std::mutex> lock(rdma_post_send_mutex_);
-        ret = ibv_post_send(qp_, &wr, &bad_wr);
-    }
 
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
@@ -333,9 +416,9 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
     struct ibv_device_attr device_attr;
     if (ibv_query_device(ib_ctx_, &device_attr) != 0)
         SLIME_LOG_ERROR("Failed to query device");
-    SLIME_LOG_INFO("Max Memory Region:" << device_attr.max_mr);
-    SLIME_LOG_INFO("Max Memory Region Size:" << device_attr.max_mr_size);
-    SLIME_LOG_INFO("Max Memory QP WR:" << device_attr.max_qp_wr);
+    SLIME_LOG_DEBUG("Max Memory Region:" << device_attr.max_mr);
+    SLIME_LOG_DEBUG("Max Memory Region Size:" << device_attr.max_mr_size);
+    SLIME_LOG_DEBUG("Max Memory QP WR:" << device_attr.max_qp_wr);
 
     struct ibv_port_attr port_attr;
     ib_port_ = ib_port;

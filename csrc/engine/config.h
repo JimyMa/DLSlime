@@ -51,6 +51,8 @@ enum class WrType {
     BASE,
     RDMA_READ_ACK,
     RDMA_WRITE_ACK,
+    RDMA_SEND_ACK,
+    RDMA_RECV_ACK,
 };
 
 struct wr_info_base {
@@ -67,14 +69,24 @@ public:
 };
 
 struct write_info: wr_info_base {
-    std::function<void(int)> callback;
-    write_info(std::function<void(int)> callback): wr_info_base(WrType::RDMA_WRITE_ACK), callback(callback) {}
+    std::function<void(int64_t)> callback;
+    write_info(std::function<void(int64_t)> callback): wr_info_base(WrType::RDMA_WRITE_ACK), callback(callback) {}
 };
 
 struct read_info: wr_info_base {
     // call back function.
     std::function<void(unsigned int)> callback;
-    read_info(std::function<void(unsigned int)> callback): wr_info_base(WrType::RDMA_READ_ACK), callback(callback) {}
+    read_info(std::function<void(int64_t)> callback): wr_info_base(WrType::RDMA_READ_ACK), callback(callback) {}
+};
+
+struct send_info: wr_info_base {
+    std::function<void(unsigned int)> callback;
+    send_info(std::function<void(int64_t)> callback): wr_info_base(WrType::RDMA_SEND_ACK), callback(callback) {}
+};
+
+struct recv_info: wr_info_base {
+    std::function<void(unsigned int)> callback;
+    recv_info(std::function<void(int64_t)> callback): wr_info_base(WrType::RDMA_RECV_ACK), callback(callback) {}
 };
 
 };  // namespace slime

@@ -38,7 +38,6 @@ class RDMAEndpoint:
             - 'gid': Global Identifier (IPv6 format for RoCE)
             - 'qp_num': Queue Pair number
             - 'lid': Local ID (InfiniBand only)
-            - 'port_num': Bound port number
         """
         return self._ctx.local_info()
 
@@ -68,7 +67,10 @@ class RDMAEndpoint:
         self._ctx.launch_cq_future()  # Start background CQ polling
 
     def stop(self):
-        """Safely stops the endpoint by terminating all background activities and releasing resources."""
+        """
+        Safely stops the endpoint by terminating
+        all background activities and releasing resources.
+        """
         self._ctx.stop_cq_future()
 
     def register_memory_region(
@@ -98,8 +100,44 @@ class RDMAEndpoint:
                 - value: mr_info
         """
         self._ctx.register_remote_memory_region(remote_mr_info)
+    
+    async def send_async(
+        self, mr_key, offset, length
+    ) -> int:
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
 
-    async def async_read_batch(
+        def _completion_handler(status: int):
+            loop.call_soon_threadsafe(future.set_result, status)
+
+        self._ctx.send_async(
+            mr_key,
+            offset,
+            length,
+            _completion_handler
+        )
+
+        return await future
+    
+    async def recv_async(
+        self, mr_key, offset, length
+    ) -> int:
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+
+        def _completion_handler(status: int):
+            loop.call_soon_threadsafe(future.set_result, status)
+
+        self._ctx.recv_async(
+            mr_key,
+            offset,
+            length,
+            _completion_handler
+        )
+
+        return await future
+
+    async def read_batch_async(
         self,
         mr_key: str,
         target_offset: int,
@@ -124,16 +162,16 @@ class RDMAEndpoint:
             loop.call_soon_threadsafe(future.set_result, status)
 
         self._ctx.batch_r_rdma_async(
+            mr_key,
             target_offset,
             source_offset,
             length,
-            mr_key,
             _completion_handler
         )
 
         return await future
 
-    async def async_read(
+    async def read_async(
         self,
         mr_key: str,
         target_offset: int,

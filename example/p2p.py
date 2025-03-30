@@ -44,7 +44,7 @@ initiator.connect_to(target.local_endpoint_info)
 # - Write to initiator's "buffer" at offset 0
 # - asyncio.run() executes the async operation synchronously for demonstration
 asyncio.run(
-    initiator.async_read_batch(
+    initiator.read_batch_async(
         mr_key="buffer",
         target_offset=[0],
         source_offset=[8],  # Write to start of local buffer

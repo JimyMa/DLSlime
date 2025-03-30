@@ -130,7 +130,7 @@ int initiator(RDMAContext& rdma_context)
 
         int done = false;
         rdma_context.batch_r_rdma_async(
-            target_offsets, source_offsets, FLAGS_block_size, "buffer", [&done](int code) { done = true; });
+            "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) { done = true; });
 
         while (!done) {}
         total_bytes += FLAGS_batch_size * FLAGS_block_size;

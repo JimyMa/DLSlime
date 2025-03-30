@@ -45,7 +45,9 @@ PYBIND11_MODULE(_slime_c, m)
         .def("batch_r_rdma_async",
              &slime::RDMAContext::batch_r_rdma_async,
              py::call_guard<py::gil_scoped_release>(),
-             "Read remote memory asynchronously");
+             "Read remote memory asynchronously")
+        .def("send_async", &slime::RDMAContext::send_async)
+        .def("recv_async", &slime::RDMAContext::recv_async);
 
     m.def("avaliable_nic", &slime::avaliable_nic);
 

@@ -46,18 +46,21 @@ public:
         return 0;
     }
 
-    /* Async RDMA Read */
-    int64_t r_rdma_async(uint64_t                          target_addr,
-                         uint64_t                          source_addr,
-                         uint64_t                          length,
-                         std::string                       mr_key,
-                         std::function<void(unsigned int)> callback);
+    /* Async RDMA SendRecv */
+    int64_t send_async(std::string mr_key, uint64_t offset, uint64_t length, std::function<void(int64_t)> callback);
+    int64_t recv_async(std::string mr_key, uint64_t offset, uint64_t length, std::function<void(int64_t)> callback);
 
-    int64_t batch_r_rdma_async(const std::vector<uint64_t>&      target_addrs,
-                               const std::vector<uint64_t>&      source_addrs,
-                               uint64_t                          length,
-                               std::string                       mr_key,
-                               std::function<void(unsigned int)> callback);
+    /* Async RDMA Read */
+    int64_t r_rdma_async(std::string                  mr_key,
+                         uint64_t                     target_offset,
+                         uint64_t                     source_offset,
+                         uint64_t                     length,
+                         std::function<void(int64_t)> callback);
+    int64_t batch_r_rdma_async(std::string                  mr_key,
+                               const std::vector<uint64_t>& target_offsets,
+                               const std::vector<uint64_t>& source_offsets,
+                               uint64_t                     length,
+                               std::function<void(int64_t)> callback);
 
     /* Completion Queue Polling */
     int64_t cq_poll_handle();

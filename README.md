@@ -99,94 +99,19 @@ cmake -DBUILD_BENCH=ON -DBUILD_PYTHON=ON ..; make
   --duration 10
 ```
 
-- Cross node performance in H800 with NIC ("mlx5_bond_0"), RoCE v2.
+### Cross node performance
 
-```
-Batch size        : 160
-Block size        : 8192
-Total trips       : 59391
-Total transferred : 74238 MiB
-Duration          : 10.0001 seconds
-Average Latency   : 0.168377 ms/trip
-Throughput        : 7423.8 MiB/s
-```
+- H800 with NIC ("mlx5_bond_0"), RoCE v2.
 
-```
-Batch size        : 160
-Block size        : 16384
-Total trips       : 51144
-Total transferred : 127860 MiB
-Duration          : 10.0002 seconds
-Average Latency   : 0.19553 ms/trip
-Throughput        : 12785.8 MiB/s
-```
+| Batch Size | Block Size (Bytes) | Total Trips | Total Transferred (MiB) | Duration (s) | Average Latency (ms/trip) | Throughput (MiB/s) |
+|-----------|-------------------|-------------|-------------------------|-------------|---------------------------|--------------------|
+| 160       | 8,192             | 59,391      | 74,238                  | 10.0001     | 0.168377                  | 7,423.8            |
+| 160       | 16,384            | 51,144      | 127,860                 | 10.0002     | 0.195530                  | 12,785.8           |
+| 160       | 32,768            | 36,614      | 183,070                 | 10.0002     | 0.273124                  | 18,306.7           |
+| 160       | 65,536            | 21,021      | 210,210                 | 10.0003     | 0.475729                  | 21,020.4           |
+| 160       | 128,000           | 11,419      | 223,027                 | 10.0006     | 0.875789                  | 22,301.3           |
+| 160       | 256,000           | 5,839       | 228,085                 | 10.0015     | 1.712880                  | 22,805.2           |
+| 160       | 512,000           | 2,956       | 230,937                 | 10.0010     | 3.383300                  | 23,091.3           |
+| 160       | 1,024,000         | 1,486       | 232,187                 | 10.0006     | 6.729860                  | 23,217.4           |
+| 160       | 2,048,000         | 742         | 231,875                 | 10.0010     | 13.478400                 | 23,185.2           |
 
-```
-Batch size        : 160
-Block size        : 32768
-Total trips       : 36614
-Total transferred : 183070 MiB
-Duration          : 10.0002 seconds
-Average Latency   : 0.273124 ms/trip
-Throughput        : 18306.7 MiB/s
-```
-
-```
-Batch size        : 160
-Block size        : 65536
-Total trips       : 21021
-Total transferred : 210210 MiB
-Duration          : 10.0003 seconds
-Average Latency   : 0.475729 ms/trip
-Throughput        : 21020.4 MiB/s
-```
-
-```
-Batch size        : 160
-Block size        : 128000
-Total trips       : 11419
-Total transferred : 223027 MiB
-Duration          : 10.0006 seconds
-Average Latency   : 0.875789 ms/trip
-Throughput        : 22301.3 MiB/s
-```
-
-```
-Batch size        : 160
-Block size        : 256000
-Total trips       : 5839
-Total transferred : 228085 MiB
-Duration          : 10.0015 seconds
-Average Latency   : 1.71288 ms/trip
-Throughput        : 22805.2 MiB/s
-```
-
-```
-Batch size        : 160
-Block size        : 512000
-Total trips       : 2956
-Total transferred : 230937 MiB
-Duration          : 10.001 seconds
-Average Latency   : 3.3833 ms/trip
-Throughput        : 23091.3 MiB/s
-```
-
-```
-Batch size        : 160
-Block size        : 1024000
-Total trips       : 1486
-Total transferred : 232187 MiB
-Duration          : 10.0006 seconds
-Average Latency   : 6.72986 ms/trip
-Throughput        : 23217.4 MiB/s
-```
-
-```
-Batch size        : 160
-Block size        : 2048000
-Total trips       : 742
-Total transferred : 231875 MiB
-Duration          : 10.001 seconds
-Average Latency   : 13.4784 ms/trip
-Throughput        : 23185.2 MiB/s
-```

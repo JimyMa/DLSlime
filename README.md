@@ -1,40 +1,28 @@
 # Slime Transfer Engine
 
+A Peer to Peer RDMA Transfer Engine.
+
 ## Usage
+
+### RDMA READ
+
+- Details in [p2p.py](example/p2p.py)
+
 ```python
-import asyncio  # For asynchronous operations
-
-import torch  # For GPU tensor management
-
-from slime import avaliable_nic, RDMAEndpoint  # RDMA endpoint management
-
-
 devices = avaliable_nic()
 assert devices, "No RDMA devices."
 
-# Initialize RDMA endpoint on NIC 'mlx5_bond_1' port 1 using Ethernet transport
+# Initialize RDMA endpoint
 initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="Ethernet")
-# Create a zero-initialized CUDA tensor on GPU 0 as local buffer
-local_tensor = torch.zeros([16], device="cuda:0", dtype=torch.uint8)
 # Register local GPU memory with RDMA subsystem
-initiator.register_memory_region(
-    mr_identifier="buffer",
-    virtual_address=local_tensor.data_ptr(),
-    length_bytes=local_tensor.numel() * local_tensor.itemsize,
-)
-
+local_tensor = torch.tensor(...)
+initiator.register_memory_region("buffer", local_tensor...)
 
 # Initialize target endpoint on different NIC
 target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="Ethernet")
-
-# Create a one-initialized CUDA tensor on GPU 1 as remote buffer
-remote_tensor = torch.ones([16], device="cuda:1", dtype=torch.uint8)
 # Register target's GPU memory
-target.register_memory_region(
-    mr_identifier="buffer",
-    virtual_address=remote_tensor.data_ptr(),
-    length_bytes=remote_tensor.numel() * remote_tensor.itemsize,
-)
+remote_tensor = torch.tensor(...)
+target.register_memory_region("buffer", remote_tensor...)
 
 # Establish bidirectional RDMA connection:
 # 1. Target connects to initiator's endpoint information
@@ -44,26 +32,34 @@ target.connect_to(initiator.local_endpoint_info)
 initiator.connect_to(target.local_endpoint_info)
 
 # Execute asynchronous batch read operation:
-# - Read 8 bytes from target's "buffer" at offset 0
-# - Write to initiator's "buffer" at offset 0
-# - asyncio.run() executes the async operation synchronously for demonstration
-asyncio.run(
-    initiator.async_read_batch(
-        mr_key="buffer",
-        target_offset=[0],
-        source_offset=[8],  # Write to start of local buffer
-        length=8,
-    )
-)
+asyncio.run(initiator.async_read_batch("buffer", [0], [8], 8))
+```
 
-# Verify data transfer:
-# - Local tensor should now contain data from remote tensor's first 8 elements
-# - Remote tensor remains unchanged (RDMA read is non-destructive)
+### SendRecv
 
-assert torch.all(local_tensor[:8] == 0)
-assert torch.all(local_tensor[8:] == 1)
-print("Local tensor after RDMA read:", local_tensor)
+- Details in [sendrecv.py](example/sendrecv.py)
 
+#### Sender
+``` python
+# RDMA init and RDMA Connect just like RDMA Read
+...
+
+# RDMA Send
+ones = torch.ones([16], dtype=torch.uint8)
+endpoint.register_memory_region("buffer", ones.data_ptr(), 16)
+asyncio.run(endpoint.send_async("buffer", 0, 8))
+```
+
+#### Receiver
+
+``` python
+# RDMA init and RDMA Connect just like RDMA Read
+...
+
+# RDMA Recv
+zeros = torch.zeros([16], dtype=torch.uint8)
+endpoint.register_memory_region("buffer", zeros.data_ptr(), 16)
+asyncio.run(endpoint.recv_async("buffer", 8, 8))
 ```
 
 ## Build

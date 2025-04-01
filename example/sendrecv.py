@@ -7,21 +7,20 @@ from slime import RDMAEndpoint
 
 import argparse
 
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--mode", default="send", type=str)
+
+parser.add_argument("--device-name", default="mlx5_bond_0", type=str)
+
+parser.add_argument("--remote-host", default="localhost", type=str)
+parser.add_argument("--local-host", default="localhost", type=str)
+parser.add_argument("--remote-port", default=8000, type=int)
+parser.add_argument("--local-port", default=8001, type=int)
+
+args = parser.parse_args()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("--mode", default="send", type=str)
-
-    parser.add_argument("--device-name", default="mlx5_bond_0", type=str)
-
-    parser.add_argument("--remote-host", default="localhost", type=str)
-    parser.add_argument("--local-host", default="localhost", type=str)
-    parser.add_argument("--remote-port", default=8000, type=int)
-    parser.add_argument("--local-port", default=8001, type=int)
-
-    args = parser.parse_args()
-
     zmq_ctx = zmq.Context(2)
     zmq_send = zmq_ctx.socket(zmq.PUSH)
     zmq_recv = zmq_ctx.socket(zmq.PULL)

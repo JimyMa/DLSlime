@@ -53,7 +53,8 @@ void RDMAContext::stop_cq_future()
 
         struct ibv_send_wr send_wr;
         memset(&send_wr, 0, sizeof(send_wr));
-        send_wr.wr_id      = (uintptr_t)this;
+        // send_wr.wr_id      = (uintptr_t)this;
+        send_wr.wr_id      = 0;
         send_wr.sg_list    = &sge;
         send_wr.num_sge    = 1;
         send_wr.opcode     = IBV_WR_SEND;
@@ -395,7 +396,7 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
     for (int i = 0; i < num_devices; ++i) {
         char* dev_name_from_list = (char*)ibv_get_device_name(dev_list[i]);
         if (strcmp(dev_name_from_list, dev_name.c_str()) == 0) {
-            SLIME_LOG_INFO("found device {}" << dev_name_from_list);
+            SLIME_LOG_INFO("found device " << dev_name_from_list);
             ib_dev  = dev_list[i];
             ib_ctx_ = ibv_open_device(ib_dev);
             break;

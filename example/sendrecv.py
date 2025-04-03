@@ -3,7 +3,7 @@ import asyncio
 import zmq
 import torch
 
-from slime import RDMAEndpoint
+from dlslime import RDMAEndpoint
 
 import argparse
 

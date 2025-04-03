@@ -1,7 +1,7 @@
 import asyncio
 from typing import Dict, Any
 
-from slime import _slime_c
+from dlslime import _slime_c
 
 class RDMAEndpoint:
     """Manages RDMA endpoint lifecycle including resource allocation and data operations.

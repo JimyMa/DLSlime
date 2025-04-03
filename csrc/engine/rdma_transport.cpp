@@ -13,7 +13,6 @@
 #include <unistd.h>
 #include <vector>
 
-#include <bits/socket.h>
 #include <infiniband/verbs.h>
 #include <stdexcept>
 

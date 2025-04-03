@@ -14,8 +14,8 @@ from fastapi.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
-from slime.config import RDMAInfo
-from slime.transport.engine import TransferEngine
+from dlslime.config import RDMAInfo
+from dlslime.transport.engine import TransferEngine
 
 from .server_args import ServerArgs
 

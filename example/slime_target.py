@@ -3,7 +3,7 @@ import time
 import zmq
 
 import torch
-from slime import _slime_c
+from dlslime import _slime_c
 
 def test_r_rdma_async():
     zmq_ctx = zmq.Context(2)

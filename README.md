@@ -1,4 +1,4 @@
-# Slime Transfer Engine
+# DLSlime Transfer Engine
 
 A Peer to Peer RDMA Transfer Engine.
 

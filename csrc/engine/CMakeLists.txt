@@ -5,4 +5,4 @@ add_library(
     rdma_transport.cpp
 )
 
-target_link_libraries(_slime PUBLIC _slime_ops _slime_utils ibverbs)
+target_link_libraries(_slime PUBLIC _slime_utils ibverbs)

@@ -2,7 +2,7 @@ import asyncio  # For asynchronous operations
 
 import torch  # For GPU tensor management
 
-from slime import avaliable_nic, RDMAEndpoint  # RDMA endpoint management
+from dlslime import avaliable_nic, RDMAEndpoint  # RDMA endpoint management
 
 
 devices = avaliable_nic()

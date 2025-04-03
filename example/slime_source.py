@@ -4,7 +4,7 @@ import time
 import zmq
 
 import torch
-from slime import _slime_c
+from dlslime import _slime_c
 
 
 async def test_r_rdma_async():

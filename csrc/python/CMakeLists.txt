@@ -7,4 +7,4 @@ pybind11_add_module(
     bind.cpp
 )
 
-target_link_libraries(_slime_c PRIVATE _slime)
+target_link_libraries(_slime_c PRIVATE _slime _slime_ops)

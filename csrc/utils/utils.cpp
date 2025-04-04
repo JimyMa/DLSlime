@@ -4,7 +4,7 @@
 #include "utils/utils.h"
 
 namespace slime {
-std::vector<std::string> avaliable_nic()
+std::vector<std::string> available_nic()
 {
     int                 num_devices;
     struct ibv_device** dev_list;
@@ -15,10 +15,10 @@ std::vector<std::string> avaliable_nic()
         return {};
     }
 
-    std::vector<std::string> avaliable_devices;
+    std::vector<std::string> available_devices;
     for (int i = 0; i < num_devices; ++i) {
-        avaliable_devices.push_back((char*)ibv_get_device_name(dev_list[i]));
+        available_devices.push_back((char*)ibv_get_device_name(dev_list[i]));
     }
-    return avaliable_devices;
+    return available_devices;
 }
 }  // namespace slime

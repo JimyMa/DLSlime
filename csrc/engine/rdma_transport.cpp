@@ -392,6 +392,11 @@ int64_t RDMAContext::init_rdma_context(std::string dev_name, uint8_t ib_port, st
         return -1;
     }
 
+    if (!num_devices) {
+        SLIME_LOG_ERROR("No RDMA devices found.")
+        return -1;
+    }
+
     for (int i = 0; i < num_devices; ++i) {
         char* dev_name_from_list = (char*)ibv_get_device_name(dev_list[i]);
         if (strcmp(dev_name_from_list, dev_name.c_str()) == 0) {

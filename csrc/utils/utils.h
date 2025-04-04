@@ -4,5 +4,5 @@
 #include <vector>
 
 namespace slime {
-std::vector<std::string> avaliable_nic();
+std::vector<std::string> available_nic();
 }

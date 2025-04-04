@@ -49,7 +49,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("send_async", &slime::RDMAContext::send_async)
         .def("recv_async", &slime::RDMAContext::recv_async);
 
-    m.def("avaliable_nic", &slime::avaliable_nic);
+    m.def("available_nic", &slime::available_nic);
 
     m.def("gather", &slime::gather);
     m.def("scatter", &slime::scatter);

@@ -2,10 +2,10 @@ import asyncio  # For asynchronous operations
 
 import torch  # For GPU tensor management
 
-from dlslime import avaliable_nic, RDMAEndpoint  # RDMA endpoint management
+from dlslime import available_nic, RDMAEndpoint  # RDMA endpoint management
 
 
-devices = avaliable_nic()
+devices = available_nic()
 assert devices, "No RDMA devices."
 
 # Initialize RDMA endpoint on NIC 'mlx5_bond_1' port 1 using Ethernet transport

@@ -9,7 +9,7 @@ A Peer to Peer RDMA Transfer Engine.
 - Details in [p2p.py](example/p2p.py)
 
 ```python
-devices = avaliable_nic()
+devices = available_nic()
 assert devices, "No RDMA devices."
 
 # Initialize RDMA endpoint

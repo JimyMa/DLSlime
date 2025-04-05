@@ -1,6 +1,7 @@
 #pragma once
 
-#include "engine/config.h"
+#include "engine/rdma/rdma_config.h"
+
 #include "utils/json.hpp"
 
 #include <cstdint>

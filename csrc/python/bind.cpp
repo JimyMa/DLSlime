@@ -1,11 +1,13 @@
-#include "engine/config.h"
+#include "engine/assignment.h"
+#include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_transport.h"
 
-#include "engine/rdma_transport.h"
 #include "ops/ops.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
 #include "utils/utils.h"
 
+#include <cstdint>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -16,9 +18,20 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(_slime_c, m)
 {
+    py::enum_<slime::OpCode>(m, "OpCode")
+        .value("READ", slime::OpCode::READ)
+        .value("SEND", slime::OpCode::SEND)
+        .value("RECV", slime::OpCode::RECV);
+    py::class_<slime::Assignment>(m, "Assignment")
+        .def(py::init<slime::OpCode,
+                      std::string,
+                      std::vector<uint64_t>,
+                      std::vector<uint64_t>,
+                      uint64_t,
+                      std::function<void(int)>>());
     py::class_<slime::RDMAContext>(m, "rdma_context")
         .def(py::init<>())
-        .def("init_rdma_context", &slime::RDMAContext::init_rdma_context)
+        .def("init_rdma_context", &slime::RDMAContext::init)
         .def("register_memory_region", &slime::RDMAContext::register_memory_region)
         .def("register_remote_memory_region",
              [](slime::RDMAContext& self, std::string mr_info) {
@@ -28,26 +41,16 @@ PYBIND11_MODULE(_slime_c, m)
              })
         .def("local_info", [](slime::RDMAContext& self) { return self.local_info().dump(); })
         .def("connect",
-             [](slime::RDMAContext& self, std::string exchange_info) {
-                 json            json_info       = json::parse(exchange_info);
-                 slime::RDMAInfo local_rdma_info = slime::RDMAInfo(json_info["rdma_info"]);
-                 self.modify_qp_to_rtsr(local_rdma_info);
+             [](slime::RDMAContext& self, std::string remote_info) {
+                 json            json_info        = json::parse(remote_info);
+                 slime::RDMAInfo remote_rdma_info = slime::RDMAInfo(json_info["rdma_info"]);
+                 self.connect_to(remote_rdma_info);
                  for (auto& mr_info : json_info["mr_info"].items())
                      self.register_remote_memory_region(mr_info.key(), mr_info.value());
              })
-        .def("cq_poll_handle", &slime::RDMAContext::cq_poll_handle)
-        .def("launch_cq_future", &slime::RDMAContext::launch_cq_future)
-        .def("stop_cq_future", &slime::RDMAContext::stop_cq_future)
-        .def("r_rdma_async",
-             &slime::RDMAContext::r_rdma_async,
-             py::call_guard<py::gil_scoped_release>(),
-             "Read remote memory asynchronously")
-        .def("batch_r_rdma_async",
-             &slime::RDMAContext::batch_r_rdma_async,
-             py::call_guard<py::gil_scoped_release>(),
-             "Read remote memory asynchronously")
-        .def("send_async", &slime::RDMAContext::send_async)
-        .def("recv_async", &slime::RDMAContext::recv_async);
+        .def("launch_cq_future", &slime::RDMAContext::launch_future)
+        .def("stop_cq_future", &slime::RDMAContext::stop_future)
+        .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>());
 
     m.def("available_nic", &slime::available_nic);
 

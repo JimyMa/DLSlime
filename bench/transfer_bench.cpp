@@ -1,5 +1,6 @@
-#include "engine/config.h"
-#include "engine/rdma_transport.h"
+#include "engine/assignment.h"
+#include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_transport.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
 
@@ -62,7 +63,7 @@ int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
 
     json remote_info = json::parse(remote_msg_str);
 
-    rdma_context.modify_qp_to_rtsr(RDMAInfo(remote_info["rdma_info"]));
+    rdma_context.connect_to(RDMAInfo(remote_info["rdma_info"]));
     for (auto& item : remote_info["mr_info"].items()) {
         rdma_context.register_remote_memory_region(item.key(), item.value());
     }
@@ -79,7 +80,7 @@ int target(RDMAContext& rdma_context)
     send.connect("tcp://" + FLAGS_remote_endpoint);
     recv.bind("tcp://" + FLAGS_local_endpoint);
 
-    rdma_context.init_rdma_context(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
+    rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
     void* data = memory_allocate();
     rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
@@ -103,14 +104,14 @@ int initiator(RDMAContext& rdma_context)
     send.connect("tcp://" + FLAGS_remote_endpoint);
     recv.bind("tcp://" + FLAGS_local_endpoint);
 
-    rdma_context.init_rdma_context(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
+    rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
     void* data = memory_allocate();
     rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
 
     SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
 
-    rdma_context.launch_cq_future();
+    rdma_context.launch_future();
 
     // 新增变量：统计相关
     uint64_t total_bytes = 0;
@@ -129,8 +130,10 @@ int initiator(RDMAContext& rdma_context)
         }
 
         int done = false;
-        rdma_context.batch_r_rdma_async(
-            "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) { done = true; });
+        rdma_context.submit(
+            Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
+                done = true;
+            }));
 
         while (!done) {}
         total_bytes += FLAGS_batch_size * FLAGS_block_size;
@@ -153,7 +156,7 @@ int initiator(RDMAContext& rdma_context)
     zmq::message_t term_msg("TERMINATE");
     send.send(term_msg, zmq::send_flags::none);
 
-    rdma_context.stop_cq_future();
+    rdma_context.stop_future();
 
     return 0;
 }

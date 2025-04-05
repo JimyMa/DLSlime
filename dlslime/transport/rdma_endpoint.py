@@ -161,7 +161,7 @@ class RDMAEndpoint:
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.batch_r_rdma_async(
+        self._ctx.submit(
             mr_key,
             target_offset,
             source_offset,

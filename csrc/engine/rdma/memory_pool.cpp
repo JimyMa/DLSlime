@@ -1,4 +1,5 @@
-#include "engine/memory_pool.h"
+#include "engine/rdma/memory_pool.h"
+
 #include "utils/logging.h"
 
 #include <cstdint>

@@ -46,9 +46,6 @@ class TransferEngine:
         recv_socket.bind(f"tcp://*:{local_port}")
         self.link_exchange_sockets[session_id] = (send_socket, recv_socket)
 
-        #
-        # Tcp exchange meta
-        #
         send_socket, recv_socket = self.link_exchange_sockets[session_id]
         local_rdma_info = rdma_link.get_local_info()
         local_mr_info = rdma_link.get_mr_info(mr_key)

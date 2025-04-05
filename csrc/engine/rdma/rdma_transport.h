@@ -1,18 +1,23 @@
 #pragma once
 
-#include "engine/config.h"
-#include "engine/memory_pool.h"
+#include "engine/assignment.h"
+#include "engine/rdma/memory_pool.h"
+#include "engine/rdma/rdma_config.h"
+
 #include "utils/json.hpp"
 
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <future>
-#include <infiniband/verbs.h>
 #include <mutex>
+#include <queue>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include <infiniband/verbs.h>
 
 namespace slime {
 
@@ -25,13 +30,16 @@ public:
     */
     RDMAContext() {}
 
-    ~RDMAContext();
+    ~RDMAContext()
+    {
+        stop_future();
+    }
 
     /* Initialize */
-    int64_t init_rdma_context(std::string dev_name, uint8_t ib_port, std::string link_type);
+    int64_t init(std::string dev_name, uint8_t ib_port, std::string link_type);
 
-    /* RDMA Info Exchange */
-    int64_t modify_qp_to_rtsr(RDMAInfo remote_rdma_info);
+    /* RDMA Link Construction */
+    int64_t connect_to(RDMAInfo remote_rdma_info);
 
     /* Memory Allocation */
     int64_t register_memory_region(std::string mr_key, uintptr_t data_ptr, size_t length)
@@ -46,32 +54,16 @@ public:
         return 0;
     }
 
-    /* Async RDMA SendRecv */
-    int64_t send_async(std::string mr_key, uint64_t offset, uint64_t length, std::function<void(int64_t)> callback);
-    int64_t recv_async(std::string mr_key, uint64_t offset, uint64_t length, std::function<void(int64_t)> callback);
+    int submit(Assignment assign);
 
-    /* Async RDMA Read */
-    int64_t r_rdma_async(std::string                  mr_key,
-                         uint64_t                     target_offset,
-                         uint64_t                     source_offset,
-                         uint64_t                     length,
-                         std::function<void(int64_t)> callback);
-    int64_t batch_r_rdma_async(std::string                  mr_key,
-                               const std::vector<uint64_t>& target_offsets,
-                               const std::vector<uint64_t>& source_offsets,
-                               uint64_t                     length,
-                               std::function<void(int64_t)> callback);
-
-    /* Completion Queue Polling */
-    int64_t cq_poll_handle();
-
-    void launch_cq_future();
-    void stop_cq_future();
+    void launch_future();
+    void stop_future();
 
     rdma_info_t get_local_rdma_info()
     {
         return local_rdma_info_;
     }
+
     rdma_info_t get_remote_rdma_info()
     {
         return remote_rdma_info_;
@@ -100,18 +92,37 @@ private:
     rdma_info_t local_rdma_info_;
 
     /* State Management */
-    bool              initialized_ = false;
-    bool              connected_   = false;
-    std::atomic<int>  outstanding_rdma_reads_{0};
-    std::atomic<bool> stop_{false};
+    bool initialized_ = false;
+    bool connected_   = false;
 
     /* Send Mutex */
     std::mutex rdma_post_send_mutex_;
 
-    /* async cq handler */
-    std::future<void> cq_future_;
+    /* Assignment Queue */
+    std::mutex             assign_queue_mutex_;
+    std::queue<Assignment> assign_queue_;
+    std::atomic<int>       outstanding_rdma_reads_{0};
 
-    std::mutex mutex_;
+    /* Has Runnable Assignment */
+    std::condition_variable has_runnable_event_;
+
+    /* async cq and wq handler */
+    std::future<void> cq_future_;
+    std::future<void> wq_future_;
+    std::atomic<bool> stop_cq_future_{false};
+    std::atomic<bool> stop_wq_future_{false};
+
+    /* Async RDMA SendRecv */
+    int64_t send_async(Assignment* assign);
+    int64_t recv_async(Assignment* assign);
+
+    /* Async RDMA Read */
+    int64_t read_batch_async(Assignment* assign);
+
+    /* Completion Queue Polling */
+    int64_t cq_poll_handle();
+    /* Working Queue Dispatch */
+    int64_t wq_dispatch_handle();
 };
 
 }  // namespace slime

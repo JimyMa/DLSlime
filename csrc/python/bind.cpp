@@ -48,8 +48,8 @@ PYBIND11_MODULE(_slime_c, m)
                  for (auto& mr_info : json_info["mr_info"].items())
                      self.register_remote_memory_region(mr_info.key(), mr_info.value());
              })
-        .def("launch_cq_future", &slime::RDMAContext::launch_future)
-        .def("stop_cq_future", &slime::RDMAContext::stop_future)
+        .def("launch_future", &slime::RDMAContext::launch_future)
+        .def("stop_future", &slime::RDMAContext::stop_future)
         .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>());
 
     m.def("available_nic", &slime::available_nic);

@@ -110,11 +110,15 @@ class RDMAEndpoint:
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.send_async(
-            mr_key,
-            offset,
-            length,
-            _completion_handler
+        self._ctx.submit(
+            _slime_c.Assignment(
+                _slime_c.OpCode.SEND,
+                mr_key,
+                [],
+                [offset],
+                length,
+                _completion_handler
+            )
         )
 
         return await future
@@ -128,11 +132,16 @@ class RDMAEndpoint:
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.recv_async(
-            mr_key,
-            offset,
-            length,
-            _completion_handler
+        self._ctx.submit(
+            _slime_c.Assignment(
+                _slime_c.OpCode.RECV,
+                mr_key,
+                [],
+                [offset],
+                length,
+                _completion_handler
+            )
+            
         )
 
         return await future
@@ -162,45 +171,14 @@ class RDMAEndpoint:
             loop.call_soon_threadsafe(future.set_result, status)
 
         self._ctx.submit(
-            mr_key,
-            target_offset,
-            source_offset,
-            length,
-            _completion_handler
-        )
-
-        return await future
-
-    async def read_async(
-        self,
-        mr_key: str,
-        target_offset: int,
-        source_offset: int,
-        length: int,
-    ) -> int:
-        """Read data from remote memory region.
-        
-        Args:
-            remote_mr_key: Target MR identifier registered at remote
-            remote_offset: Offset in remote MR (bytes)
-            local_buffer_addr: Local destination VA
-            read_size: Data size in bytes
-            
-        Returns:
-            ibv_wc_status code (0 = IBV_WC_SUCCESS)
-        """
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-
-        def _completion_handler(status: int):
-            loop.call_soon_threadsafe(future.set_result, status)
-
-        self._ctx.r_rdma_async(
-            mr_key,
-            target_offset,
-            source_offset,
-            length,
-            _completion_handler
+            _slime_c.Assignment(
+                _slime_c.OpCode.READ,
+                mr_key,
+                target_offset,
+                source_offset,
+                length,
+                _completion_handler
+            )
         )
 
         return await future

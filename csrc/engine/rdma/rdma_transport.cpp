@@ -511,7 +511,19 @@ int64_t RDMAContext::wq_dispatch_handle()
             }
             if (batch_size + outstanding_rdma_reads_ < MAX_SEND_WR) {
                 assign_queue_.pop();
-                read_batch_async(front_assign);
+                switch (front_assign->opcode) {
+                    case OpCode::SEND:
+                        send_async(front_assign);
+                        break;
+                    case OpCode::RECV:
+                        recv_async(front_assign);
+                        break;
+                    case OpCode::READ:
+                        read_batch_async(front_assign);
+                        break;
+                    default:
+                        SLIME_LOG_ERROR("Unknown OpCode");
+                }
             }
             else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));

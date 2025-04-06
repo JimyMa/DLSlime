@@ -17,7 +17,7 @@ include_directories(csrc)
 add_subdirectory(csrc)
 
 if (BUILD_BENCH)
-add_subdirectory(bench)
+add_subdirectory(bench/cpp)
 endif (BUILD_BENCH)
 
 if (BUILD_TEST)

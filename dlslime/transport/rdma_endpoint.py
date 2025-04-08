@@ -64,14 +64,14 @@ class RDMAEndpoint:
             remote_endpoint_info: Dictionary from remote's local_endpoint_info()
         """
         self._ctx.connect(remote_endpoint_info)
-        self._ctx.launch_cq_future()  # Start background CQ polling
+        self._ctx.launch_future()  # Start background CQ polling
 
     def stop(self):
         """
         Safely stops the endpoint by terminating
         all background activities and releasing resources.
         """
-        self._ctx.stop_cq_future()
+        self._ctx.stop_future()
 
     def register_memory_region(
         self,

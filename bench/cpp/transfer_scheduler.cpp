@@ -1,14 +1,9 @@
-#include "engine/assignment.h"
-#include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_transport.h"
-#include "utils/json.hpp"
-#include "utils/logging.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <chrono>
 #include <condition_variable>
 #include <future>
-#include <gflags/gflags.h>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -16,26 +11,38 @@
 #include <thread>
 #include <unistd.h>
 #include <unordered_map>
+
+#include <gflags/gflags.h>
 #include <zmq.h>
 #include <zmq.hpp>
 
-#include <cstdlib>
+
+#include "engine/assignment.h"
+#include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_scheduler.h"
+#include "engine/rdma/rdma_transport.h"
+#include "utils/json.hpp"
+#include "utils/logging.h"
+
 
 using json = nlohmann::json;
 using namespace slime;
 
 #define TERMINATE 0
 
-DEFINE_string(mode, "target", "initiator or target");
+DEFINE_string(mode, "", "initiator or target");
 
 DEFINE_string(device_name, "mlx5_bond_0", "device name");
 DEFINE_uint32(ib_port, 1, "device name");
 DEFINE_string(link_type, "Ethernet", "IB or Ethernet");
 
-DEFINE_string(local_endpoint, "", "local endpoint");
-DEFINE_string(remote_endpoint, "", "remote endpoint");
+DEFINE_string(target_addr, "10.130.8.139", "local endpoint");
+DEFINE_int32(target_port, 23344, "local endpoint");
+DEFINE_string(initiator_addr, "10.130.8.138", "remote endpoint");
+DEFINE_int32(initiator_port, 24433, "local endpoint");
 
-DEFINE_uint64(buffer_size, (1ull << 30) + 1, "total size of data buffer");
+
+DEFINE_uint64(buffer_size, (2048000 * 160) + 1, "total size of data buffer");
 DEFINE_uint64(block_size, 2048000, "block size");
 DEFINE_uint64(batch_size, 160, "batch size");
 
@@ -73,68 +80,29 @@ bool checkInitiatorCopied(void* data) {
     return true;
 }
 
-int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
+
+int target()
 {
-    json local_info = rdma_context.local_info();
-
-    zmq::message_t local_msg(local_info.dump());
-    send.send(local_msg, zmq::send_flags::none);
-
-    zmq::message_t remote_msg;
-    recv.recv(remote_msg, zmq::recv_flags::none);
-    std::string remote_msg_str(static_cast<const char*>(remote_msg.data()), remote_msg.size());
-
-    json remote_info = json::parse(remote_msg_str);
-
-    rdma_context.connect_to(RDMAInfo(remote_info["rdma_info"]));
-    for (auto& item : remote_info["mr_info"].items()) {
-        rdma_context.register_remote_memory_region(item.key(), item.value());
-    }
-
-    return 0;
-}
-
-int target(RDMAContext& rdma_context)
-{
-    zmq::context_t context(2);
-    zmq::socket_t  send(context, ZMQ_PUSH);
-    zmq::socket_t  recv(context, ZMQ_PULL);
-
-    send.connect("tcp://" + FLAGS_remote_endpoint);
-    recv.bind("tcp://" + FLAGS_local_endpoint);
-
-    rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
-
     void* data = memory_allocate_target();
-    rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
 
-    SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
-
-    zmq::message_t term_msg;
-    recv.recv(term_msg, zmq::recv_flags::none);
-    std::string signal = std::string(static_cast<char*>(term_msg.data()), term_msg.size());
-    SLIME_ASSERT(!strcmp(signal.c_str(), "TERMINATE"), "signal error");
-
+    RDMAScheduler scheduler;
+    scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
+    std::cout << "Target registed MR" << std::endl;
+    scheduler.connectRemoteNode(FLAGS_initiator_addr, FLAGS_initiator_port, FLAGS_target_port);
+    std::cout << "Target connected remote" << std::endl;
+    scheduler.waitRemoteTeriminate();
     return 0;
 }
 
-int initiator(RDMAContext& rdma_context)
+int initiator()
 {
-    zmq::context_t context(2);
-    zmq::socket_t  send(context, ZMQ_PUSH);
-    zmq::socket_t  recv(context, ZMQ_PULL);
-
-    send.connect("tcp://" + FLAGS_remote_endpoint);
-    recv.bind("tcp://" + FLAGS_local_endpoint);
-
-    rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
-
     void* data = memory_allocate_initiator();
-    rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
-
-    SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
-
-    rdma_context.launch_future();
+    
+    RDMAScheduler scheduler;
+    scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
+    std::cout << "Initiator registed MR" << std::endl;
+    scheduler.connectRemoteNode(FLAGS_target_addr, FLAGS_target_port, FLAGS_initiator_port);
+    std::cout << "Initiator connected remote" << std::endl;
 
     // 新增变量：统计相关
     uint64_t total_bytes = 0;
@@ -153,13 +121,9 @@ int initiator(RDMAContext& rdma_context)
         }
 
         int done = false;
-        rdma_context.submit(
+        scheduler.submitAssignment(
             Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
-                if (code == 1 || code == 200) {
-                    done = true;
-                } else {
-                    std::cout << "submit assignment failed" << std::endl;
-                }
+                done = true;
             }));
 
         while (!done) {}
@@ -180,10 +144,7 @@ int initiator(RDMAContext& rdma_context)
     std::cout << "Average Latency   : " << duration / total_trips * 1000 << " ms/trip" << std::endl;
     std::cout << "Throughput        : " << throughput << " MiB/s" << std::endl;
 
-    zmq::message_t term_msg("TERMINATE");
-    send.send(term_msg, zmq::send_flags::none);
-
-    rdma_context.stop_future();
+    scheduler.teriminate();
 
     SLIME_ASSERT(checkInitiatorCopied(data), "Transfered data not equal!");
 
@@ -193,12 +154,11 @@ int initiator(RDMAContext& rdma_context)
 int main(int argc, char** argv)
 {
     gflags::ParseCommandLineFlags(&argc, &argv, false);
-    RDMAContext context;
     if (FLAGS_mode == "initiator") {
-        return initiator(context);
+        return initiator();
     }
     else if (FLAGS_mode == "target") {
-        return target(context);
+        return target();
     }
     SLIME_ABORT("Unsupported mode: must be 'initiator' or 'target'");
 }

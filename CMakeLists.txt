@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.26)
 
-project(_slime C CXX CUDA)
+project(_slime C CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BUILD_BENCH   "Build transfer engine benchmark"  OFF)
-option(BUILD_CUDA    "Build CUDA Ops"                    ON)
 option(BUILD_PYTHON  "Build python wrapper"             OFF)
 option(BUILD_TEST    "Build test"                       OFF)
 

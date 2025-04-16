@@ -2,7 +2,6 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_transport.h"
 
-#include "ops/ops.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
 #include "utils/utils.h"
@@ -53,7 +52,4 @@ PYBIND11_MODULE(_slime_c, m)
         .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>());
 
     m.def("available_nic", &slime::available_nic);
-
-    m.def("gather", &slime::gather);
-    m.def("scatter", &slime::scatter);
 }

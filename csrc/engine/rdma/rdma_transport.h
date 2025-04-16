@@ -59,12 +59,12 @@ public:
     void launch_future();
     void stop_future();
 
-    rdma_info_t get_local_rdma_info()
+    rdma_info_t get_local_rdma_info() const
     {
         return local_rdma_info_;
     }
 
-    rdma_info_t get_remote_rdma_info()
+    rdma_info_t get_remote_rdma_info() const
     {
         return remote_rdma_info_;
     }
@@ -72,6 +72,10 @@ public:
     json local_info()
     {
         return json{{"rdma_info", local_rdma_info_.to_json()}, {"mr_info", memory_pool_.mr_info()}};
+    }
+
+    std::string get_dev_ib() const {
+        return "@" + device_name_ + "#" + std::to_string(ib_port_);
     }
 
 private:

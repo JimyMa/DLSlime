@@ -75,7 +75,7 @@ int RDMAScheduler::connectRemoteNode(const std::string& remote_addr, int remote_
         for (auto& item : remote_info[i]["mr_info"].items()) {
             rdma_ctxs_[i].register_remote_memory_region(item.key(), item.value());
         }
-        
+        rdma_ctxs_[i].launch_future();
     }
     return 0;
 }

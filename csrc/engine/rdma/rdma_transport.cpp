@@ -28,6 +28,7 @@ namespace slime {
 
 int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string link_type)
 {
+    device_name_ = dev_name;
     uint16_t      lid;
     enum ibv_mtu  active_mtu;
     union ibv_gid gid;

@@ -61,8 +61,9 @@ private:
 
     json rdma_exchange_info();
 
+    void resetTcpSockets();
 
-    const static size_t SPLIT_ASSIGNMENT_BYTES = 2;
+    const static size_t SPLIT_ASSIGNMENT_BYTES = (1ull << 30);
     const static size_t SPLIT_ASSIGNMENT_BATCH_SIZE = 8192;
     const static int PORT_EACH_DEVICE = 1;
 
@@ -71,8 +72,9 @@ private:
     std::atomic<int> split_assignment_done_cnt_;
     int last_rdma_selection_ = -1;
 
-    zmq::socket_t* send_;
-    zmq::socket_t* recv_;
+    zmq::context_t* tcp_context_ = nullptr;
+    zmq::socket_t* send_ = nullptr;
+    zmq::socket_t* recv_ = nullptr;
 };
 
 };  // namespace slime

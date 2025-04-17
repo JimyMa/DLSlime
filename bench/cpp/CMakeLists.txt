@@ -10,3 +10,16 @@ target_link_libraries(
     PUBLIC
     _slime_rdma gflags zmq
 )
+
+add_executable(
+    transfer_scheduler
+    transfer_scheduler.cpp
+)
+
+target_include_directories(transfer_scheduler PUBLIC ${ZeroMQ_INCLUDE_DIRS})
+
+target_link_libraries(
+    transfer_scheduler
+    PUBLIC
+    _slime_rdma gflags zmq
+)

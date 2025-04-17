@@ -4,6 +4,8 @@
 #include <map>
 #include <vector>
 
+#include <zmq.hpp>
+
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_transport.h"
 
@@ -47,6 +49,10 @@ public:
 
     int submitAssignment(const Assignment& assignment);
     
+    int teriminate();
+
+    int waitRemoteTeriminate();
+
 
 private:
     bool canCombineAssignment(const Assignment& a1, const Assignment& a2) const;
@@ -64,6 +70,9 @@ private:
     std::map<std::string, std::map<uintptr_t, DevMrSlice>> virtual_mr_to_actual_mr_;
     std::atomic<int> split_assignment_done_cnt_;
     int last_rdma_selection_ = -1;
+
+    zmq::socket_t* send_;
+    zmq::socket_t* recv_;
 };
 
 };  // namespace slime

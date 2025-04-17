@@ -13,19 +13,34 @@ namespace slime {
 RDMAScheduler::RDMAScheduler()
 {
     std::vector<std::string> dev_names = available_nic();
+    size_t count = dev_names.size() * PORT_EACH_DEVICE;
+    rdma_ctxs_ = std::vector<RDMAContext>(count);
+    int index = 0;
     for (const std::string& name : dev_names) {
         for (int ib = 0; ib < PORT_EACH_DEVICE; ++ib) {
-            rdma_ctxs_.push_back(RDMAContext());
-            rdma_ctxs_.back().init(name, ib, "Ethernet");
+            
+            rdma_ctxs_[index].init(name, ib, "Ethernet");
+            ++index;
         }
     }
+
     std::srand(std::time(nullptr));
+    send_ = nullptr;
+    recv_ = nullptr;
 }
 
 RDMAScheduler::~RDMAScheduler()
 {
     for (RDMAContext& ctx : rdma_ctxs_) {
         ctx.stop_future();
+    }
+    if (send_ != nullptr) {
+        send_->close();
+        delete send_;
+    }
+    if (recv_ != nullptr) {
+        recv_->close();
+        delete recv_;
     }
 }
 
@@ -51,19 +66,27 @@ int64_t RDMAScheduler::register_memory_region(const std::string& mr_key, uintptr
 int RDMAScheduler::connectRemoteNode(const std::string& remote_addr, int remote_port, int local_port)
 {
     zmq::context_t context(2);
-    zmq::socket_t  send(context, ZMQ_PUSH);
-    zmq::socket_t  recv(context, ZMQ_PULL);
+    if (send_ != nullptr) {
+        send_->close();
+        delete send_;
+    }
+    send_ = new zmq::socket_t(context, ZMQ_PUSH);
+    if (recv_ != nullptr) {
+        recv_->close();
+        delete recv_;
+    }
+    recv_ = new zmq::socket_t(context, ZMQ_PULL);
 
-    send.connect("tcp://" + remote_addr + ":" + std::to_string(remote_port));
-    recv.bind("tcp://*:" + std::to_string(local_port));
+    send_->connect("tcp://" + remote_addr + ":" + std::to_string(remote_port));
+    recv_->bind("tcp://*:" + std::to_string(local_port));
 
     json local_info = rdma_exchange_info();
 
     zmq::message_t local_msg(local_info.dump());
-    send.send(local_msg, zmq::send_flags::none);
+    send_->send(local_msg, zmq::send_flags::none);
 
     zmq::message_t remote_msg;
-    recv.recv(remote_msg, zmq::recv_flags::none);
+    recv_->recv(remote_msg, zmq::recv_flags::none);
     std::string remote_msg_str(static_cast<const char*>(remote_msg.data()), remote_msg.size());
 
     json remote_info = json::parse(remote_msg_str);
@@ -144,7 +167,6 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
     }
 
     // Combine assignments
-    std::map<int, std::vector<Assignment>> rdma_index_to_assignments;
     int assignment_cnt = 0;
     for (auto p : rdma_index_to_assignments) {
         std::vector<Assignment> combined_assignments;
@@ -191,7 +213,30 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
             // TODO: mulit thread it and redispatch
             rdma_ctx.submit(assignment);
         }
-    }   
+    }
+    return 0;   
+}
+
+int RDMAScheduler::teriminate() {
+    zmq::message_t term_msg("TERMINATE");
+    send_->send(term_msg, zmq::send_flags::none);
+    for (RDMAContext& ctx : rdma_ctxs_) {
+        ctx.stop_future();
+    }
+    return 0;
+}
+
+int RDMAScheduler::waitRemoteTeriminate() {
+    zmq::message_t term_msg;
+    recv_->recv(term_msg, zmq::recv_flags::none);
+    std::string signal = std::string(static_cast<char*>(term_msg.data()), term_msg.size());
+    if (signal == "TERMINATE") {
+        for (RDMAContext& ctx : rdma_ctxs_) {
+            ctx.stop_future();
+        }
+        return 0;
+    }
+    return -1;
 }
 
 bool RDMAScheduler::canCombineAssignment(const Assignment& a1, const Assignment& a2) const {

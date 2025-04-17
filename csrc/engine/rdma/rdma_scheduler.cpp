@@ -21,9 +21,7 @@ RDMAScheduler::RDMAScheduler()
     rdma_ctxs_ = std::vector<RDMAContext>(count);
     int index = 0;
     for (const std::string& name : dev_names) {
-        std::cout << "dev_name = " << name << std::endl;
         for (int ib = 1; ib <= PORT_EACH_DEVICE; ++ib) {
-            std::cout << "ib = " << ib << std::endl;
             rdma_ctxs_[index].init(name, ib, "Ethernet");
             ++index;
         }
@@ -52,7 +50,6 @@ int64_t RDMAScheduler::register_memory_region(const std::string& mr_key, uintptr
         int select_rdma_index = selectRdma();
         RDMAContext& rdma_ctx = rdma_ctxs_[select_rdma_index];
         std::string act_mr_key = mr_key + rdma_ctx.get_dev_ib() + ",cnt=" + std::to_string(count);
-        std::cout << "register index " << select_rdma_index << ", actual mr_key = " << act_mr_key << ", cur_ptr = " << cur_ptr << ", regist_len = " << regist_len << std::endl;
         rdma_ctx.register_memory_region(act_mr_key, cur_ptr, regist_len);
         slices.insert({cur_ptr, DevMrSlice(select_rdma_index, act_mr_key, data_ptr, cur_ptr, regist_len)});
         rem_len -= regist_len;
@@ -68,10 +65,8 @@ int RDMAScheduler::connectRemoteNode(const std::string& remote_addr, int remote_
     tcp_context_ = new zmq::context_t(2);
     send_ = new zmq::socket_t(*tcp_context_, ZMQ_PUSH);
     recv_ = new zmq::socket_t(*tcp_context_, ZMQ_PULL);
-    std::cout << "Before conn" << std::endl;
     send_->connect("tcp://" + remote_addr + ":" + std::to_string(remote_port));
     recv_->bind("tcp://*:" + std::to_string(local_port));
-    std::cout << "Bind connection" << std::endl;
     json local_info = rdma_exchange_info();
 
     zmq::message_t local_msg(local_info.dump());
@@ -84,19 +79,13 @@ int RDMAScheduler::connectRemoteNode(const std::string& remote_addr, int remote_
     json remote_info = json::parse(remote_msg_str);
 
     SLIME_ASSERT_EQ(rdma_ctxs_.size(), remote_info.size(), "Currently only support two nodes with same number of RDMA devices");
-    std::cout << "Before rdma_ctxs connect" << std::endl;
     for (int i = 0; i < rdma_ctxs_.size(); ++i) {
-        std::cout << "i = " << i << std::endl;
         rdma_ctxs_[i].connect_to(RDMAInfo(remote_info[i]["rdma_info"]));
-        std::cout << "rdma ctx connect " << i << std::endl;
         for (auto& item : remote_info[i]["mr_info"].items()) {
             rdma_ctxs_[i].register_remote_memory_region(item.key(), item.value());
         }
-        std::cout << "rdma ctx register MR " << i << std::endl;
         rdma_ctxs_[i].launch_future();
-        std::cout << "rdma ctx launch_future" << i << std::endl;
     }
-    std::cout << "finish loop and exit" << std::endl;
     return 0;
 }
 
@@ -164,17 +153,11 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
         }
     }
 
-    std::cout << "Combining assignments" << std::endl;
     // Combine assignments
     int assignment_cnt = 0;
     for (auto p : rdma_index_to_assignments) {
         std::vector<Assignment> combined_assignments;
         const std::vector<Assignment>& assignments = p.second;
-        std::cout << "rdma_index = " << p.first << std::endl;
-        for (auto a : assignments) {
-            std::cout << "assignment: " << a.mr_key << ", " << a.length << std::endl;
-        }
-        std::cout << "===================" << std::endl;
         combined_assignments.push_back(assignments[0]);
         for (int i = 1; i < assignments.size(); ++i) {
             if (canCombineAssignment(assignments[i], combined_assignments.back())) {
@@ -190,14 +173,11 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
         }
         p.second = combined_assignments;
         assignment_cnt += combined_assignments.size();
-        for (auto a : combined_assignments) {
-            std::cout << "assignment: " << a.mr_key << ", " << a.length << std::endl;
-        }
     }
 
     
 
-    std::cout << "Setting new callback" << std::endl;
+
     // Set new callback and submit assignment to rdma context
     split_assignment_done_cnt_.store(0, std::memory_order_relaxed);
     for (auto p : rdma_index_to_assignments) {
@@ -205,15 +185,12 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
         RDMAContext& rdma_ctx = rdma_ctxs_[p.first];
         for (int i = 0; i < assignments.size(); ++i) {
             assignments[i].callback = [&](int code) {
-                std::cout << "Haha we finish one code = " << code << std::endl;
                 if (code == 0 || code == 200) { // success code
                     int cnt = split_assignment_done_cnt_.load(std::memory_order_relaxed);
                     if (cnt == -1) {
                         return;
                     }
-                    std::cout << "before add, cnt = " << cnt << ", assignment_cnt = " << assignment_cnt << std::endl;
                     cnt = split_assignment_done_cnt_.fetch_add(1);
-                    std::cout << "after add, cnt = " << cnt << ", assignment_cnt = " << assignment_cnt << std::endl;
                     if (cnt + 1 == assignment_cnt) {
                         // All assignment success
                         assignment.callback(code);
@@ -227,12 +204,9 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
                     }
                 }};
             // TODO: mulit thread it and redispatch
-            std::cout << "Before actual submit to rdma index " << p.first << std::endl;
             rdma_ctx.submit(assignments[i]);
-            std::cout << "End of submittion" << std::endl;
         }
     }
-    std::cout << "Ending loop" << std::endl;
     return 0;   
 }
 

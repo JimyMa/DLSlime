@@ -37,13 +37,13 @@ DEFINE_uint32(ib_port, 1, "device name");
 DEFINE_string(link_type, "Ethernet", "IB or Ethernet");
 
 DEFINE_string(target_addr, "10.130.8.139", "local endpoint");
-DEFINE_int32(target_port, 33344, "local endpoint");
+DEFINE_int32(target_port, 23344, "local endpoint");
 DEFINE_string(initiator_addr, "10.130.8.138", "remote endpoint");
-DEFINE_int32(initiator_port, 44433, "local endpoint");
+DEFINE_int32(initiator_port, 24433, "local endpoint");
 
 
-DEFINE_uint64(buffer_size, 10, "total size of data buffer");
-DEFINE_uint64(block_size, 5, "block size");
+DEFINE_uint64(buffer_size, (64ull << 30) + 1, "total size of data buffer");
+DEFINE_uint64(block_size, (64ull << 30), "block size");
 DEFINE_uint64(batch_size, 1, "batch size");
 
 DEFINE_uint64(duration, 10, "duration (s)");
@@ -85,9 +85,7 @@ int target()
     void* data = memory_allocate_target();
 
     RDMAScheduler scheduler;
-    std::cout << "Target initialized scheduler" << std::endl;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
-    std::cout << "Target registed buffer" << std::endl;
     scheduler.connectRemoteNode(FLAGS_initiator_addr, FLAGS_initiator_port, FLAGS_target_port);
     std::cout << "Target connected remote" << std::endl;
     scheduler.waitRemoteTeriminate();
@@ -99,9 +97,7 @@ int initiator()
     void* data = memory_allocate_initiator();
     
     RDMAScheduler scheduler;
-    std::cout << "Initiator initialized scheduler" << std::endl;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
-    std::cout << "Initiator registered buffer" << std::endl;
     scheduler.connectRemoteNode(FLAGS_target_addr, FLAGS_target_port, FLAGS_initiator_port);
     std::cout << "Initiator connected remote" << std::endl;
 
@@ -126,10 +122,8 @@ int initiator()
             Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
                 done = true;
             }));
-        std::cout << "Ending submit assignment" << std::endl;
 
         while (!done) {}
-        std::cout << "End of while(!done){} " << std::endl;
         total_bytes += FLAGS_batch_size * FLAGS_block_size;
         total_trips += 1;
     }

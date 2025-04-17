@@ -35,19 +35,42 @@ DEFINE_string(link_type, "Ethernet", "IB or Ethernet");
 DEFINE_string(local_endpoint, "", "local endpoint");
 DEFINE_string(remote_endpoint, "", "remote endpoint");
 
-DEFINE_uint64(buffer_size, 1ull << 30, "total size of data buffer");
-DEFINE_uint64(block_size, 32768, "block size");
-DEFINE_uint64(batch_size, 80, "batch size");
+DEFINE_uint64(buffer_size, (1ull << 30) + 1, "total size of data buffer");
+DEFINE_uint64(block_size, 2048000, "block size");
+DEFINE_uint64(batch_size, 160, "batch size");
 
 DEFINE_uint64(duration, 10, "duration (s)");
 
 json mr_info;
 
-void* memory_allocate()
+void* memory_allocate_initiator()
 {
     SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
     void* data = (void*)malloc(FLAGS_buffer_size);
+    memset(data, 0, FLAGS_buffer_size);
     return data;
+}
+
+void* memory_allocate_target()
+{
+    SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
+    void* data = (void*)malloc(FLAGS_buffer_size);
+    int* int_data = (int*)data;
+    for (int i = 0; i < (FLAGS_buffer_size >> 2); ++i) {
+        int_data[i] = i % 1024;
+    }
+    return data;
+}
+
+bool checkInitiatorCopied(void* data) {
+    int* int_data = (int*)data;
+    for (int i = 0; i < (FLAGS_batch_size * FLAGS_block_size >> 2); ++i) {
+        if (int_data[i] != i % 1024) {
+            SLIME_ASSERT(false, "Transfered data at i = " << i << " not same.");
+            return false;
+        }
+    }
+    return true;
 }
 
 int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
@@ -82,7 +105,7 @@ int target(RDMAContext& rdma_context)
 
     rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
-    void* data = memory_allocate();
+    void* data = memory_allocate_target();
     rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
 
     SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
@@ -106,7 +129,7 @@ int initiator(RDMAContext& rdma_context)
 
     rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
-    void* data = memory_allocate();
+    void* data = memory_allocate_initiator();
     rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
 
     SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
@@ -132,7 +155,11 @@ int initiator(RDMAContext& rdma_context)
         int done = false;
         rdma_context.submit(
             Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
-                done = true;
+                if (code == 1 || code == 200) {
+                    done = true;
+                } else {
+                    std::cout << "submit assignment failed" << std::endl;
+                }
             }));
 
         while (!done) {}
@@ -157,6 +184,8 @@ int initiator(RDMAContext& rdma_context)
     send.send(term_msg, zmq::send_flags::none);
 
     rdma_context.stop_future();
+
+    SLIME_ASSERT(checkInitiatorCopied(data), "Transfered data not equal!");
 
     return 0;
 }

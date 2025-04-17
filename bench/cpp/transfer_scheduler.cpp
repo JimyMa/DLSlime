@@ -42,9 +42,9 @@ DEFINE_string(initiator_addr, "10.130.8.138", "remote endpoint");
 DEFINE_int32(initiator_port, 24433, "local endpoint");
 
 
-DEFINE_uint64(buffer_size, (64ull << 30) + 1, "total size of data buffer");
-DEFINE_uint64(block_size, (64ull << 30), "block size");
-DEFINE_uint64(batch_size, 1, "batch size");
+DEFINE_uint64(buffer_size, (1ull << 30) + 1, "total size of data buffer");
+DEFINE_uint64(block_size, 2048000, "block size");
+DEFINE_uint64(batch_size, 160, "batch size");
 
 DEFINE_uint64(duration, 10, "duration (s)");
 
@@ -73,6 +73,7 @@ bool checkInitiatorCopied(void* data) {
     int* int_data = (int*)data;
     for (int i = 0; i < (FLAGS_batch_size * FLAGS_block_size >> 2); ++i) {
         if (int_data[i] != i % 1024) {
+            SLIME_ASSERT(false, "Transfered data at i = " << i << " not same.");
             return false;
         }
     }

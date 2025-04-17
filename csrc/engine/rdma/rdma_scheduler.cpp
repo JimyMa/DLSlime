@@ -10,8 +10,8 @@
 
 namespace slime {
 
-const size_t RDMAScheduler::SPLIT_ASSIGNMENT_BYTES;
-const size_t RDMAScheduler::SPLIT_ASSIGNMENT_BATCH_SIZE;
+const uint64_t RDMAScheduler::SPLIT_ASSIGNMENT_BYTES;
+const uint64_t RDMAScheduler::SPLIT_ASSIGNMENT_BATCH_SIZE;
 const int RDMAScheduler::PORT_EACH_DEVICE;
 
 RDMAScheduler::RDMAScheduler()
@@ -39,14 +39,14 @@ RDMAScheduler::~RDMAScheduler()
     resetTcpSockets();
 }
 
-int64_t RDMAScheduler::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, size_t length)
+int64_t RDMAScheduler::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
 {
-    size_t rem_len = length;
+    uint64_t rem_len = length;
     uintptr_t cur_ptr = data_ptr;
     std::map<uintptr_t, DevMrSlice>& slices = virtual_mr_to_actual_mr_[mr_key];
     int count = 0;
     while (rem_len > 0) {
-        int regist_len = std::min(rem_len, SPLIT_ASSIGNMENT_BYTES);
+        uint64_t regist_len = std::min(rem_len, SPLIT_ASSIGNMENT_BYTES);
         int select_rdma_index = selectRdma();
         RDMAContext& rdma_ctx = rdma_ctxs_[select_rdma_index];
         std::string act_mr_key = mr_key + rdma_ctx.get_dev_ib() + ",cnt=" + std::to_string(count);
@@ -136,7 +136,7 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
             actual_source_offset = 0;
             uint64_t rem_len = actual_source_offset + assignment.length - SPLIT_ASSIGNMENT_BYTES;
             while (rem_len > 0) {
-                int assign_len = std::min(rem_len, SPLIT_ASSIGNMENT_BYTES);
+                uint64_t assign_len = std::min(rem_len, SPLIT_ASSIGNMENT_BYTES);
                 int rdma_index = next_slice->rdma_ctx_index;
                 rdma_index_to_assignments[rdma_index].push_back(Assignment(
                     assignment.opcode,

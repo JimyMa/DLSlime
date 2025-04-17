@@ -86,6 +86,7 @@ int target()
 
     RDMAScheduler scheduler;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
+    std::cout << "Target registed MR" << std::endl;
     scheduler.connectRemoteNode(FLAGS_initiator_addr, FLAGS_initiator_port, FLAGS_target_port);
     std::cout << "Target connected remote" << std::endl;
     scheduler.waitRemoteTeriminate();
@@ -98,6 +99,7 @@ int initiator()
     
     RDMAScheduler scheduler;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
+    std::cout << "Initiator registed MR" << std::endl;
     scheduler.connectRemoteNode(FLAGS_target_addr, FLAGS_target_port, FLAGS_initiator_port);
     std::cout << "Initiator connected remote" << std::endl;
 

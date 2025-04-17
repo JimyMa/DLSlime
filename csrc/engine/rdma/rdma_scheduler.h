@@ -63,8 +63,8 @@ private:
 
     void resetTcpSockets();
 
-    const static uint64_t SPLIT_ASSIGNMENT_BYTES = (20ull << 30);
-    const static uint64_t SPLIT_ASSIGNMENT_BATCH_SIZE = 8192;
+    const static int64_t SPLIT_ASSIGNMENT_BYTES = (20ull << 30);
+    const static int64_t SPLIT_ASSIGNMENT_BATCH_SIZE = 8192;
     const static int PORT_EACH_DEVICE = 1;
 
     std::vector<RDMAContext> rdma_ctxs_;

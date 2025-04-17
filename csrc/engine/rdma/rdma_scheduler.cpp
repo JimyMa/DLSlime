@@ -10,6 +10,10 @@
 
 namespace slime {
 
+const size_t RDMAScheduler::SPLIT_ASSIGNMENT_BYTES;
+const size_t RDMAScheduler::SPLIT_ASSIGNMENT_BATCH_SIZE;
+const int RDMAScheduler::PORT_EACH_DEVICE;
+
 RDMAScheduler::RDMAScheduler()
 {
     std::vector<std::string> dev_names = available_nic();

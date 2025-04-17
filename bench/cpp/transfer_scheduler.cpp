@@ -38,30 +38,52 @@ DEFINE_string(link_type, "Ethernet", "IB or Ethernet");
 
 DEFINE_string(local_addr, "10.130.8.138", "local endpoint");
 DEFINE_int32(local_port, 33344, "local endpoint");
-DEFINE_string(remote_addr, "10.130.8.140", "remote endpoint");
+DEFINE_string(remote_addr, "10.130.8.139", "remote endpoint");
 DEFINE_int32(remote_port, 44433, "local endpoint");
 
 
-DEFINE_uint64(buffer_size, 1ull << 30, "total size of data buffer");
-DEFINE_uint64(block_size, 32768, "block size");
-DEFINE_uint64(batch_size, 80, "batch size");
+DEFINE_uint64(buffer_size, 8 * 20, "total size of data buffer");
+DEFINE_uint64(block_size, 4 * 20, "block size");
+DEFINE_uint64(batch_size, 1, "batch size");
 
 DEFINE_uint64(duration, 10, "duration (s)");
 
 json mr_info;
 
-void* memory_allocate()
+void* memory_allocate_initiator()
 {
     SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
     void* data = (void*)malloc(FLAGS_buffer_size);
+    memset(data, 0, FLAGS_buffer_size);
     return data;
+}
+
+void* memory_allocate_target()
+{
+    SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
+    void* data = (void*)malloc(FLAGS_buffer_size);
+    int* int_data = (int*)data;
+    for (int i = 0; i < (FLAGS_buffer_size >> 2); ++i) {
+        int_data[i] = i % 1024;
+    }
+    return data;
+}
+
+bool checkInitiatorCopied(void* data) {
+    int* int_data = (int*)data;
+    for (int i = 0; i < (FLAGS_batch_size * FLAGS_block_size >> 2); ++i) {
+        if (int_data[i] != i % 1024) {
+            return false;
+        }
+    }
+    return true;
 }
 
 
 int target()
 {
     RDMAScheduler scheduler;
-    void* data = memory_allocate();
+    void* data = memory_allocate_target();
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
     scheduler.connectRemoteNode(FLAGS_local_addr, FLAGS_local_port, FLAGS_remote_port);
     scheduler.waitRemoteTeriminate();
@@ -70,7 +92,7 @@ int target()
 
 int initiator()
 {
-    void* data = memory_allocate();
+    void* data = memory_allocate_initiator();
     
     RDMAScheduler scheduler;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
@@ -118,6 +140,9 @@ int initiator()
     std::cout << "Throughput        : " << throughput << " MiB/s" << std::endl;
 
     scheduler.teriminate();
+
+    SLIME_ASSERT(checkInitiatorCopied(data), "Transfered data not equal!");
+
     return 0;
 }
 

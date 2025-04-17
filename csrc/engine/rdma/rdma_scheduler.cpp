@@ -21,8 +21,7 @@ RDMAScheduler::RDMAScheduler()
     rdma_ctxs_ = std::vector<RDMAContext>(count);
     int index = 0;
     for (const std::string& name : dev_names) {
-        for (int ib = 0; ib < PORT_EACH_DEVICE; ++ib) {
-            
+        for (int ib = 1; ib <= PORT_EACH_DEVICE; ++ib) {
             rdma_ctxs_[index].init(name, ib, "Ethernet");
             ++index;
         }

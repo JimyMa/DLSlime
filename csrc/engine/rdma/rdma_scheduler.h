@@ -62,9 +62,9 @@ private:
     json rdma_exchange_info();
 
 
-    const static size_t SPLIT_ASSIGNMENT_BYTES = (1 << 30);
+    const static size_t SPLIT_ASSIGNMENT_BYTES = 2;
     const static size_t SPLIT_ASSIGNMENT_BATCH_SIZE = 8192;
-    const static int PORT_EACH_DEVICE = 2;
+    const static int PORT_EACH_DEVICE = 1;
 
     std::vector<RDMAContext> rdma_ctxs_;
     std::map<std::string, std::map<uintptr_t, DevMrSlice>> virtual_mr_to_actual_mr_;

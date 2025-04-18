@@ -62,17 +62,17 @@ void* memory_allocate_target()
 {
     SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
     void* data = (void*)malloc(FLAGS_buffer_size);
-    int* int_data = (int*)data;
-    for (int i = 0; i < (FLAGS_buffer_size >> 2); ++i) {
-        int_data[i] = i % 1024;
+    char* byte_data = (char*)data;
+    for (int64_t i = 0; i < FLAGS_buffer_size; ++i) {
+        byte_data[i] = i % 128;
     }
     return data;
 }
 
 bool checkInitiatorCopied(void* data) {
-    int* int_data = (int*)data;
-    for (int i = 0; i < (FLAGS_batch_size * FLAGS_block_size >> 2); ++i) {
-        if (int_data[i] != i % 1024) {
+    char* byte_data = (char*)data;
+    for (int64_t i = 0; i < (FLAGS_batch_size * FLAGS_block_size); ++i) {
+        if (byte_data[i] != i % 128) {
             SLIME_ASSERT(false, "Transfered data at i = " << i << " not same.");
             return false;
         }

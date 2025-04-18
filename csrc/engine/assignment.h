@@ -32,6 +32,7 @@ struct Assignment {
     Assignment(Assignment&)       = default;
     Assignment(const Assignment&) = default;
     Assignment(Assignment&&)      = default;
+    Assignment& operator=(const Assignment& other) = default;
 
     OpCode                   opcode;
     std::string              mr_key;

@@ -42,9 +42,9 @@ DEFINE_string(initiator_addr, "10.130.8.138", "remote endpoint");
 DEFINE_int32(initiator_port, 24433, "local endpoint");
 
 
-DEFINE_uint64(buffer_size, (1ull << 30) + 1, "total size of data buffer");
-DEFINE_uint64(block_size, 2048000, "block size");
-DEFINE_uint64(batch_size, 160, "batch size");
+DEFINE_uint64(buffer_size, (2048000 * 160) + 1, "total size of data buffer");
+DEFINE_uint64(block_size, 2048000 * 2, "block size");
+DEFINE_uint64(batch_size, 80, "batch size");
 
 DEFINE_uint64(duration, 10, "duration (s)");
 

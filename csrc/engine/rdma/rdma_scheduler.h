@@ -63,13 +63,15 @@ private:
 
     void resetTcpSockets();
 
-    const static int64_t SPLIT_ASSIGNMENT_BYTES = (8ull << 20);
+    const static int64_t SPLIT_ASSIGNMENT_BYTES = (256ull << 20);
     const static int64_t SPLIT_ASSIGNMENT_BATCH_SIZE = 8192;
     const static int PORT_EACH_DEVICE = 1;
 
     std::vector<RDMAContext> rdma_ctxs_;
     std::map<std::string, std::map<uintptr_t, DevMrSlice>> virtual_mr_to_actual_mr_;
     std::atomic<int> split_assignment_done_cnt_;
+    std::map<int, std::vector<Assignment>> rdma_index_to_assignments;
+    int assignment_cnt = 0;
     int last_rdma_selection_ = -1;
 
     zmq::context_t* tcp_context_ = nullptr;

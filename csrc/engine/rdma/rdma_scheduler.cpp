@@ -94,7 +94,7 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
     // Get assignment actual rdma_context
     SLIME_ASSERT(virtual_mr_to_actual_mr_.count(assignment.mr_key), "submitAssignment with non-exist MR Key");
     const std::map<uintptr_t, DevMrSlice>& slices = virtual_mr_to_actual_mr_[assignment.mr_key];
-    std::map<int, std::vector<Assignment>> rdma_index_to_assignments;
+    rdma_index_to_assignments.clear();
     uintptr_t origin_data_ptr = slices.begin()->first;
     int batch_size = assignment.source_offsets.size();
     for (int i = 0; i < batch_size; ++i) {
@@ -154,8 +154,8 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
     }
 
     // Combine assignments
-    int assignment_cnt = 0;
-    for (auto p : rdma_index_to_assignments) {
+    assignment_cnt = 0;
+    for (auto& p : rdma_index_to_assignments) {
         std::vector<Assignment> combined_assignments;
         const std::vector<Assignment>& assignments = p.second;
         combined_assignments.push_back(assignments[0]);
@@ -169,18 +169,17 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
                                                                   assignments[i].target_offsets.end());
             } else {
                 combined_assignments.push_back(assignments[i]);
-            }
+            }    
         }
         p.second = combined_assignments;
         assignment_cnt += combined_assignments.size();
     }
 
-    
-
-
     // Set new callback and submit assignment to rdma context
     split_assignment_done_cnt_.store(0, std::memory_order_relaxed);
-    for (auto p : rdma_index_to_assignments) {
+    SLIME_ASSERT_NE(assignment_cnt, 2, "Assignment count failure");
+    for (auto& p : rdma_index_to_assignments) {
+        
         std::vector<Assignment>& assignments = p.second;
         RDMAContext& rdma_ctx = rdma_ctxs_[p.first];
         for (int i = 0; i < assignments.size(); ++i) {

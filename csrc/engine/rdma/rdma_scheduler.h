@@ -63,7 +63,7 @@ private:
 
     void resetTcpSockets();
 
-    const static int64_t SPLIT_ASSIGNMENT_BYTES = (16ull << 20);
+    const static int64_t SPLIT_ASSIGNMENT_BYTES = (8ull << 20);
     const static int64_t SPLIT_ASSIGNMENT_BATCH_SIZE = 8192;
     const static int PORT_EACH_DEVICE = 1;
 

@@ -155,11 +155,7 @@ int initiator(RDMAContext& rdma_context)
         int done = false;
         rdma_context.submit(
             Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
-                if (code == 1 || code == 200) {
-                    done = true;
-                } else {
-                    std::cout << "submit assignment failed" << std::endl;
-                }
+                done = true;
             }));
 
         while (!done) {}

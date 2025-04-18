@@ -503,7 +503,7 @@ int64_t RDMAContext::wq_dispatch_handle()
         if (stop_wq_future_)
             return 0;
         while (!assign_queue_.empty()) {
-            Assignment* front_assign = new Assignment(assign_queue_.front());// new Assignment(std::move(assign_queue_.front()));
+            Assignment* front_assign = new Assignment(assign_queue_.front());
             size_t      batch_size   = front_assign->source_offsets.size();
             if (batch_size > MAX_SEND_WR) {
                 SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SEND WR(" << MAX_SEND_WR

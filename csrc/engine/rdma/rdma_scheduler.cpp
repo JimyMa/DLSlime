@@ -132,9 +132,10 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
                 [](int code){}
             ));
             const DevMrSlice* next_slice = &(gt_offset_iter->second);
+            
+            int64_t rem_len = actual_source_offset + assignment.length - SPLIT_ASSIGNMENT_BYTES;
             actual_target_offset = 0;
             actual_source_offset = 0;
-            int64_t rem_len = actual_source_offset + assignment.length - SPLIT_ASSIGNMENT_BYTES;
             while (rem_len > 0) {
                 int64_t assign_len = std::min(rem_len, SPLIT_ASSIGNMENT_BYTES);
                 int rdma_index = next_slice->rdma_ctx_index;
@@ -177,9 +178,7 @@ int RDMAScheduler::submitAssignment(const Assignment& assignment)
 
     // Set new callback and submit assignment to rdma context
     split_assignment_done_cnt_.store(0, std::memory_order_relaxed);
-    SLIME_ASSERT_NE(assignment_cnt_, 2, "Assignment count failure");
     for (auto& p : rdma_index_to_assignments_) {
-        
         std::vector<Assignment>& assignments = p.second;
         RDMAContext& rdma_ctx = rdma_ctxs_[p.first];
         for (int i = 0; i < assignments.size(); ++i) {

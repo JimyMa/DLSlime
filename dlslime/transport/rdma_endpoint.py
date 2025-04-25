@@ -17,14 +17,14 @@ class RDMAEndpoint:
         self,
         device_name: str,
         ib_port: int = 1,
-        link_type: str = "Ethernet",
+        link_type: str = "RoCE",
     ):
         """Initialize an RDMA endpoint bound to specific hardware resources.
         
         Args:
             device_name: RDMA NIC device name (e.g. 'mlx5_0')
             ib_port: InfiniBand physical port number (1-based indexing)
-            transport_type: Underlying transport ('Ethernet' or 'InfiniBand')
+            transport_type: Underlying transport ('RoCE' or 'InfiniBand')
         """
         self._ctx = _slime_c.rdma_context()
         self.initialize_endpoint(device_name, ib_port, link_type)

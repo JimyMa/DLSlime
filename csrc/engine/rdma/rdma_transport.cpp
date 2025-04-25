@@ -89,7 +89,7 @@ int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string lin
         SLIME_LOG_ERROR("Unable to query port {} attributes\n" << ib_port_);
         return -1;
     }
-    if ((port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND && link_type == "Ethernet")
+    if ((port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND && link_type == "RoCE")
         || (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET && link_type == "IB")) {
         SLIME_LOG_ERROR("port link layer and config link type don't match");
         return -1;
@@ -292,10 +292,15 @@ void RDMAContext::stop_future()
     }
 }
 
-int RDMAContext::submit(Assignment assign)
+int RDMAContext::submit(Assignment assignment)
 {
     std::unique_lock<std::mutex> lock(assign_queue_mutex_);
-    assign_queue_.push(assign);
+
+    std::vector<Assignment> assignments = assignment.split(MAX_RECV_WR / 2);
+    for (Assignment& assign : assignments) {
+        assign_queue_.push(assign);
+    }
+
     has_runnable_event_.notify_one();
     return 0;
 }
@@ -527,7 +532,7 @@ int64_t RDMAContext::wq_dispatch_handle()
                 }
             }
             else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
                 SLIME_LOG_WARN("Assignment Queue is full.");
             }
         }

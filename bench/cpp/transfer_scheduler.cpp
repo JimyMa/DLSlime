@@ -34,7 +34,7 @@ DEFINE_string(mode, "", "initiator or target");
 
 DEFINE_string(device_name, "mlx5_bond_0", "device name");
 DEFINE_uint32(ib_port, 1, "device name");
-DEFINE_string(link_type, "Ethernet", "IB or Ethernet");
+DEFINE_string(link_type, "RoCE", "IB or RoCE");
 
 DEFINE_string(target_addr, "10.130.8.139", "local endpoint");
 DEFINE_int32(target_port, 23344, "local endpoint");

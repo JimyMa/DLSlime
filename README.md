@@ -13,13 +13,13 @@ devices = available_nic()
 assert devices, "No RDMA devices."
 
 # Initialize RDMA endpoint
-initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="Ethernet")
+initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="RoCE")
 # Register local GPU memory with RDMA subsystem
 local_tensor = torch.tensor(...)
 initiator.register_memory_region("buffer", local_tensor...)
 
 # Initialize target endpoint on different NIC
-target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="Ethernet")
+target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
 # Register target's GPU memory
 remote_tensor = torch.tensor(...)
 target.register_memory_region("buffer", remote_tensor...)

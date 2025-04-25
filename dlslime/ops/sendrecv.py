@@ -12,7 +12,7 @@ from dlslime.transport.rdma_endpoint import RDMAContext
 
 class TransferEngine:
 
-    def __init__(self, dev_name: str, ib_port: int = 1, link_type: str = "Ethernet"):
+    def __init__(self, dev_name: str, ib_port: int = 1, link_type: str = "RoCE"):
         self.dev_name = dev_name
         self.ib_port = ib_port
         self.link_type = link_type

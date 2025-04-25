@@ -8,8 +8,8 @@ from dlslime import available_nic, RDMAEndpoint  # RDMA endpoint management
 devices = available_nic()
 assert devices, "No RDMA devices."
 
-# Initialize RDMA endpoint on NIC 'mlx5_bond_1' port 1 using Ethernet transport
-initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="Ethernet")
+# Initialize RDMA endpoint on NIC 'mlx5_bond_1' port 1 using RoCE transport
+initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="RoCE")
 # Create a zero-initialized CUDA tensor on GPU 0 as local buffer
 local_tensor = torch.zeros([16], device="cuda:0", dtype=torch.uint8)
 # Register local GPU memory with RDMA subsystem
@@ -21,7 +21,7 @@ initiator.register_memory_region(
 
 
 # Initialize target endpoint on different NIC
-target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="Ethernet")
+target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
 
 # Create a one-initialized CUDA tensor on GPU 1 as remote buffer
 remote_tensor = torch.ones([16], device="cuda:1", dtype=torch.uint8)

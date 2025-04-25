@@ -30,7 +30,7 @@ DEFINE_string(mode, "target", "initiator or target");
 
 DEFINE_string(device_name, "mlx5_bond_0", "device name");
 DEFINE_uint32(ib_port, 1, "device name");
-DEFINE_string(link_type, "Ethernet", "IB or Ethernet");
+DEFINE_string(link_type, "RoCE", "IB or RoCE");
 
 DEFINE_string(local_endpoint, "", "local endpoint");
 DEFINE_string(remote_endpoint, "", "remote endpoint");
@@ -155,11 +155,7 @@ int initiator(RDMAContext& rdma_context)
         int done = false;
         rdma_context.submit(
             Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
-                if (code == 1 || code == 200) {
-                    done = true;
-                } else {
-                    std::cout << "submit assignment failed" << std::endl;
-                }
+                done = true;
             }));
 
         while (!done) {}

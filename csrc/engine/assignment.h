@@ -27,12 +27,16 @@ struct Assignment {
         length(length),
         callback(std::move(callback))
     {
+        if (target_offsets.size() != source_offsets.size())
+            SLIME_LOG_ERROR("target_ofsets.size() != source_offsets.size()");
     }
 
     Assignment(Assignment&)       = default;
     Assignment(const Assignment&) = default;
     Assignment(Assignment&&)      = default;
     Assignment& operator=(const Assignment& other) = default;
+
+    std::vector<Assignment> split(int step);
 
     OpCode                   opcode;
     std::string              mr_key;

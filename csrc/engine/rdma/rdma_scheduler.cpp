@@ -22,7 +22,7 @@ RDMAScheduler::RDMAScheduler()
     int index = 0;
     for (const std::string& name : dev_names) {
         for (int ib = 1; ib <= PORT_EACH_DEVICE; ++ib) {
-            rdma_ctxs_[index].init(name, ib, "Ethernet");
+            rdma_ctxs_[index].init(name, ib, "RoCE");
             ++index;
         }
     }

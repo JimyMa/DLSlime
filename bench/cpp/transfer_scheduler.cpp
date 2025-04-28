@@ -2,7 +2,6 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
-#include <cstdlib>
 #include <future>
 #include <mutex>
 #include <stdexcept>
@@ -72,7 +71,7 @@ bool checkInitiatorCopied(void* data)
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < (FLAGS_batch_size * FLAGS_block_size); ++i) {
         if (byte_data[i] != i % 128) {
-            SLIME_ASSERT(false, "Transfered data at i = " << i << " not same.");
+            SLIME_ASSERT(false, "Transferred data at i = " << i << " not same.");
             return false;
         }
     }
@@ -85,7 +84,7 @@ int target()
 
     RDMAScheduler scheduler;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
-    std::cout << "Target registed MR" << std::endl;
+    std::cout << "Target registered MR" << std::endl;
     scheduler.connectRemoteNode(FLAGS_initiator_addr, FLAGS_initiator_port, FLAGS_target_port);
     std::cout << "Target connected remote" << std::endl;
     scheduler.waitRemoteTeriminate();
@@ -98,7 +97,7 @@ int initiator()
 
     RDMAScheduler scheduler;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
-    std::cout << "Initiator registed MR" << std::endl;
+    std::cout << "Initiator registered MR" << std::endl;
     scheduler.connectRemoteNode(FLAGS_target_addr, FLAGS_target_port, FLAGS_initiator_port);
     std::cout << "Initiator connected remote" << std::endl;
 
@@ -144,7 +143,7 @@ int initiator()
 
     scheduler.teriminate();
 
-    SLIME_ASSERT(checkInitiatorCopied(data), "Transfered data not equal!");
+    SLIME_ASSERT(checkInitiatorCopied(data), "Transferred data not equal!");
 
     return 0;
 }

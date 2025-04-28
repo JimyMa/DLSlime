@@ -4,9 +4,11 @@ from typing import Any, Dict, List
 from dlslime import _slime_c
 from dlslime.assignment import Assignment
 
+
 class RDMAEndpoint:
-    """Manages RDMA endpoint lifecycle including resource allocation and data operations.
-    
+    """Manages RDMA endpoint lifecycle including resource allocation and data
+    operations.
+
     An RDMA endpoint represents a communication entity with:
     - Memory Region (MR) registration
     - Peer connection establishment
@@ -18,10 +20,10 @@ class RDMAEndpoint:
         self,
         device_name: str,
         ib_port: int = 1,
-        link_type: str = "RoCE",
+        link_type: str = 'RoCE',
     ):
         """Initialize an RDMA endpoint bound to specific hardware resources.
-        
+
         Args:
             device_name: RDMA NIC device name (e.g. 'mlx5_0')
             ib_port: InfiniBand physical port number (1-based indexing)
@@ -33,7 +35,7 @@ class RDMAEndpoint:
     @property
     def local_endpoint_info(self) -> Dict[str, Any]:
         """Retrieve local endpoint parameters for peer connection setup.
-        
+
         Returns:
             Dictionary containing:
             - 'gid': Global Identifier (IPv6 format for RoCE)
@@ -49,18 +51,15 @@ class RDMAEndpoint:
         transport_type: str,
     ) -> int:
         """Configure the endpoint with hardware resources.
-        
+
         Returns:
             0 on success, non-zero error code matching IBV_ERROR_* codes
         """
         return self._ctx.init_rdma_context(device_name, ib_port, transport_type)
 
-    def connect_to(
-        self,
-        remote_endpoint_info: Dict[str, Any]
-    ) -> None:
+    def connect_to(self, remote_endpoint_info: Dict[str, Any]) -> None:
         """Establish RC (Reliable Connection) to a remote endpoint.
-        
+
         Args:
             remote_endpoint_info: Dictionary from remote's local_endpoint_info()
         """
@@ -68,10 +67,8 @@ class RDMAEndpoint:
         self._ctx.launch_future()  # Start background CQ polling
 
     def stop(self):
-        """
-        Safely stops the endpoint by terminating
-        all background activities and releasing resources.
-        """
+        """Safely stops the endpoint by terminating all background activities
+        and releasing resources."""
         self._ctx.stop_future()
 
     def register_memory_region(
@@ -81,69 +78,43 @@ class RDMAEndpoint:
         length_bytes: int,
     ) -> None:
         """Register a Memory Region (MR) for RDMA operations.
-        
+
         Args:
             mr_identifier: Unique key to reference this MR
             virtual_address: Starting VA of the memory block
             length_bytes: Size of the region in bytes
         """
         self._ctx.register_memory_region(mr_identifier, virtual_address, length_bytes)
-    
-    def register_remote_memory_region(
-        self,
-        remote_mr_info: str
-    ) -> None:
+
+    def register_remote_memory_region(self, remote_mr_info: str) -> None:
         """Register a Remote Memory Region (MR) for RDMA operations.
-        
+
         Args:
             remote_mr_info:
                 - key: mr_key
                 - value: mr_info
         """
         self._ctx.register_remote_memory_region(remote_mr_info)
-    
-    async def send_async(
-        self, mr_key, offset, length
-    ) -> int:
+
+    async def send_async(self, mr_key, offset, length) -> int:
         loop = asyncio.get_running_loop()
         future = loop.create_future()
 
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.submit(
-            _slime_c.Assignment(
-                _slime_c.OpCode.SEND,
-                mr_key,
-                [],
-                [offset],
-                length,
-                _completion_handler
-            )
-        )
+        self._ctx.submit(_slime_c.Assignment(_slime_c.OpCode.SEND, mr_key, [], [offset], length, _completion_handler))
 
         return await future
-    
-    async def recv_async(
-        self, mr_key, offset, length
-    ) -> int:
+
+    async def recv_async(self, mr_key, offset, length) -> int:
         loop = asyncio.get_running_loop()
         future = loop.create_future()
 
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.submit(
-            _slime_c.Assignment(
-                _slime_c.OpCode.RECV,
-                mr_key,
-                [],
-                [offset],
-                length,
-                _completion_handler
-            )
-            
-        )
+        self._ctx.submit(_slime_c.Assignment(_slime_c.OpCode.RECV, mr_key, [], [offset], length, _completion_handler))
 
         return await future
 
@@ -153,30 +124,25 @@ class RDMAEndpoint:
         async_op=False,
     ) -> int:
         """Perform batched read from remote MR to local buffer.
-        
+
         Args:
             remote_mr_key: Target MR identifier registered at remote
             remote_offset: Offset in remote MR (bytes)
             local_buffer_addr: Local destination VA
             read_size: Data size in bytes
-            
+
         Returns:
             ibv_wc_status code (0 = IBV_WC_SUCCESS)
         """
-        rdma_assignment = self._ctx.submit(
-            _slime_c.OpCode.READ,
-            [
-                _slime_c.Assignment(
-                    assign.mr_key,
-                    assign.target_offset,
-                    assign.source_offset,
-                    assign.length,
-                )
-                for assign in batch
-            ]
-        )
+        rdma_assignment = self._ctx.submit(_slime_c.OpCode.READ, [
+            _slime_c.Assignment(
+                assign.mr_key,
+                assign.target_offset,
+                assign.source_offset,
+                assign.length,
+            ) for assign in batch
+        ])
         if async_op:
             return rdma_assignment
         else:
             return rdma_assignment.wait()
-

@@ -43,7 +43,7 @@ int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string lin
     uint32_t      psn;
 
     if (initialized_) {
-        SLIME_LOG_ERROR("allready initialized.");
+        SLIME_LOG_ERROR("Already initialized.");
         return -1;
     }
 

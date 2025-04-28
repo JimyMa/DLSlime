@@ -12,7 +12,7 @@ install(
 )
 
 set_target_properties(
-    _slime_engine _slime_rdma _slime_c _slime_ops _slime_utils 
+    _slime_engine _slime_rdma _slime_c _slime_ops _slime_utils
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "\${ORIGIN}"

@@ -1,33 +1,29 @@
-import asyncio  # For asynchronous operations
-
 import torch  # For GPU tensor management
 
-from dlslime import available_nic, RDMAEndpoint, Assignment  # RDMA endpoint management
-
+from dlslime import Assignment, RDMAEndpoint, available_nic  # RDMA endpoint management
 
 devices = available_nic()
-assert devices, "No RDMA devices."
+assert devices, 'No RDMA devices.'
 
 # Initialize RDMA endpoint on NIC 'mlx5_bond_1' port 1 using RoCE transport
-initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="RoCE")
+initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type='RoCE')
 # Create a zero-initialized CUDA tensor on GPU 0 as local buffer
-local_tensor = torch.zeros([16], device="cuda:0", dtype=torch.uint8)
+local_tensor = torch.zeros([16], device='cuda:0', dtype=torch.uint8)
 # Register local GPU memory with RDMA subsystem
 initiator.register_memory_region(
-    mr_identifier="buffer",
+    mr_identifier='buffer',
     virtual_address=local_tensor.data_ptr(),
     length_bytes=local_tensor.numel() * local_tensor.itemsize,
 )
 
-
 # Initialize target endpoint on different NIC
-target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
+target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type='RoCE')
 
 # Create a one-initialized CUDA tensor on GPU 1 as remote buffer
-remote_tensor = torch.ones([16], device="cuda", dtype=torch.uint8)
+remote_tensor = torch.ones([16], device='cuda', dtype=torch.uint8)
 # Register target's GPU memory
 target.register_memory_region(
-    mr_identifier="buffer",
+    mr_identifier='buffer',
     virtual_address=remote_tensor.data_ptr(),
     length_bytes=remote_tensor.numel() * remote_tensor.itemsize,
 )
@@ -43,17 +39,7 @@ initiator.connect_to(target.local_endpoint_info)
 # - Read 8 bytes from target's "buffer" at offset 0
 # - Write to initiator's "buffer" at offset 0
 # - asyncio.run() executes the async operation synchronously for demonstration
-x = initiator.read_batch_async(
-    [
-        Assignment(
-            mr_key="buffer",
-            target_offset=0,
-            source_offset=8,
-            length=8
-        )
-    ],
-    async_op=True
-)
+x = initiator.read_batch_async([Assignment(mr_key='buffer', target_offset=0, source_offset=8, length=8)], async_op=True)
 x.wait()
 
 # Verify data transfer:
@@ -62,4 +48,4 @@ x.wait()
 
 assert torch.all(local_tensor[:8] == 0)
 assert torch.all(local_tensor[8:] == 1)
-print("Local tensor after RDMA read:", local_tensor)
+print('Local tensor after RDMA read:', local_tensor)

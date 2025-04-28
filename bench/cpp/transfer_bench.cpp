@@ -14,7 +14,6 @@
 #include <stdexcept>
 #include <string>
 #include <sys/time.h>
-#include <thread>
 #include <unistd.h>
 #include <unordered_map>
 #include <zmq.h>
@@ -67,7 +66,7 @@ bool checkInitiatorCopied(void* data) {
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < (FLAGS_batch_size * FLAGS_block_size); ++i) {
         if (byte_data[i] != i % 128) {
-            SLIME_ASSERT(false, "Transfered data at i = " << i << " not same.");
+            SLIME_ASSERT(false, "Transferred data at i = " << i << " not same.");
             return false;
         }
     }
@@ -184,7 +183,7 @@ int initiator(RDMAContext& rdma_context)
 
     rdma_context.stop_future();
 
-    SLIME_ASSERT(checkInitiatorCopied(data), "Transfered data not equal!");
+    SLIME_ASSERT(checkInitiatorCopied(data), "Transferred data not equal!");
 
     return 0;
 }

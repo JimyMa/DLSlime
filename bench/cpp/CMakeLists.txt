@@ -8,7 +8,7 @@ target_include_directories(transfer_bench PUBLIC ${ZeroMQ_INCLUDE_DIRS})
 target_link_libraries(
     transfer_bench
     PUBLIC
-    _slime_engine _slime_rdma pthread gflags zmq
+    _slime_engine _slime_rdma gflags zmq
 )
 
 add_executable(
@@ -21,5 +21,5 @@ target_include_directories(transfer_scheduler PUBLIC ${ZeroMQ_INCLUDE_DIRS})
 target_link_libraries(
     transfer_scheduler
     PUBLIC
-    _slime_rdma gflags zmq
+    _slime_engine _slime_rdma gflags zmq
 )

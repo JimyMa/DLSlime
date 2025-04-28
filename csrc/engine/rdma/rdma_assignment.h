@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -44,7 +45,7 @@ public:
     std::string dump() {
         std::string rdma_assignment_dump = "";
         for (Assignment& assignment : batch_) {
-            rdma_assignment_dump += assignment.dump() + "\n"; 
+            rdma_assignment_dump += assignment.dump() + "\n";
         }
         return rdma_assignment_dump;
     }

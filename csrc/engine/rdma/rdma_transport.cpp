@@ -1,6 +1,7 @@
 #include "engine/rdma/rdma_transport.h"
 #include "engine/assignment.h"
 #include "engine/rdma/memory_pool.h"
+#include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 
 #include "utils/ibv_helper.h"
@@ -22,9 +23,15 @@
 
 namespace slime {
 
-#define MAX_SEND_WR 8192
-#define MAX_RECV_WR 8192
-#define POLL_COUNT 256
+typedef struct callback_info {
+    callback_info(OpCode opcode, size_t batchsize, callback_fn_t& callback):
+        opcode_(opcode), batchsize_(batchsize), callback_(callback)
+    {
+    }
+    OpCode        opcode_;
+    size_t        batchsize_;
+    callback_fn_t callback_;
+} callback_info_t;
 
 int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string link_type)
 {
@@ -292,36 +299,32 @@ void RDMAContext::stop_future()
     }
 }
 
-int RDMAContext::submit(Assignment assignment)
+int RDMAContext::submit(RDMAAssignment* rdma_assignment)
 {
     std::unique_lock<std::mutex> lock(assign_queue_mutex_);
 
-    std::vector<Assignment> assignments = assignment.split(MAX_RECV_WR / 2);
-    for (Assignment& assign : assignments) {
-        assign_queue_.push(assign);
-    }
-
+    assign_queue_.push(rdma_assignment);
     has_runnable_event_.notify_one();
     return 0;
 }
 
-int64_t RDMAContext::send_async(Assignment* assign)
+int64_t RDMAContext::send_async(RDMAAssignment* assign)
 {
     int ret;
 
-    struct ibv_mr* mr        = memory_pool_.get_mr(assign->mr_key);
-    json           remote_mr = memory_pool_.get_remote_mr(assign->mr_key);
+    struct ibv_mr* mr        = memory_pool_.get_mr(assign->batch_[0].mr_key);
+    remote_mr_t    remote_mr = memory_pool_.get_remote_mr(assign->batch_[0].mr_key);
 
     struct ibv_sge sge;
     memset(&sge, 0, sizeof(sge));
-    sge.addr   = (uintptr_t)mr->addr + assign->source_offsets[0];
-    sge.length = assign->length;
+    sge.addr   = (uintptr_t)mr->addr + assign->batch_[0].source_offset;
+    sge.length = assign->batch_[0].length;
     sge.lkey   = mr->lkey;
 
     struct ibv_send_wr wr, *bad_wr = NULL;
     memset(&wr, 0, sizeof(wr));
 
-    wr.wr_id      = (uintptr_t)assign;
+    wr.wr_id      = 0;
     wr.opcode     = IBV_WR_SEND;
     wr.sg_list    = &sge;
     wr.num_sge    = 1;
@@ -340,23 +343,23 @@ int64_t RDMAContext::send_async(Assignment* assign)
     return 0;
 }
 
-int64_t RDMAContext::recv_async(Assignment* assign)
+int64_t RDMAContext::recv_async(RDMAAssignment* assign)
 {
     int ret;
 
-    struct ibv_mr* mr        = memory_pool_.get_mr(assign->mr_key);
-    json           remote_mr = memory_pool_.get_remote_mr(assign->mr_key);
+    struct ibv_mr* mr        = memory_pool_.get_mr(assign->batch_[0].mr_key);
+    remote_mr_t    remote_mr = memory_pool_.get_remote_mr(assign->batch_[0].mr_key);
 
     struct ibv_sge sge;
     memset(&sge, 0, sizeof(sge));
-    sge.addr   = (uintptr_t)mr->addr + assign->source_offsets[0];
-    sge.length = assign->length;
+    sge.addr   = (uintptr_t)mr->addr + assign->batch_[0].source_offset;
+    sge.length = assign->batch_[0].length;
     sge.lkey   = mr->lkey;
 
     struct ibv_recv_wr wr, *bad_wr = NULL;
     memset(&wr, 0, sizeof(wr));
 
-    wr.wr_id   = (uintptr_t)assign;
+    wr.wr_id   = 0;
     wr.sg_list = &sge;
     wr.num_sge = 1;
 
@@ -373,39 +376,35 @@ int64_t RDMAContext::recv_async(Assignment* assign)
     return 0;
 }
 
-int64_t RDMAContext::read_batch_async(Assignment* assign)
+int64_t RDMAContext::read_batch_async(RDMAAssignment* assign)
 {
-    size_t target_batch_size = assign->target_offsets.size();
-    size_t source_batch_size = assign->source_offsets.size();
-    if (target_batch_size != source_batch_size) {
-        SLIME_LOG_ERROR("target_offsets.size() != target_offsets.size()");
-        return -1;
-    }
+    size_t              batch_size = assign->batch_.size();
+    struct ibv_send_wr* bad_wr     = NULL;
+    struct ibv_send_wr* wr         = new ibv_send_wr[batch_size];
+    struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
-    struct ibv_send_wr* bad_wr      = NULL;
-    struct ibv_send_wr* wr          = new ibv_send_wr[source_batch_size];
-    struct ibv_sge*     sge         = new ibv_sge[source_batch_size];
-    struct ibv_mr*      mr          = memory_pool_.get_mr(assign->mr_key);
-    json                remote_mr   = memory_pool_.get_remote_mr(assign->mr_key);
-    uint64_t            remote_addr = remote_mr["addr"].get<uint64_t>();
-    uint32_t            remote_rkey = remote_mr["rkey"].get<uint32_t>();
-    for (size_t i = 0; i < source_batch_size; ++i) {
+    for (size_t i = 0; i < batch_size; ++i) {
+        Assignment     subassign   = assign->batch_[i];
+        struct ibv_mr* mr          = memory_pool_.get_mr(subassign.mr_key);
+        remote_mr_t    remote_mr   = memory_pool_.get_remote_mr(subassign.mr_key);
+        uint64_t       remote_addr = remote_mr.addr;
+        uint32_t       remote_rkey = remote_mr.rkey;
         memset(&sge[i], 0, sizeof(ibv_sge));
-        sge[i].addr   = (uint64_t)mr->addr + assign->source_offsets[i];
-        sge[i].length = assign->length;
+        sge[i].addr   = (uint64_t)mr->addr + subassign.source_offset;
+        sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
 
-        wr[i].wr_id               = (i == source_batch_size - 1) ? (uintptr_t)assign : 0;
+        wr[i].wr_id               = (i == batch_size - 1) ? (uintptr_t)(assign) : 0;
         wr[i].opcode              = IBV_WR_RDMA_READ;
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
-        wr[i].send_flags          = (i == source_batch_size - 1) ? IBV_SEND_SIGNALED : 0;
-        wr[i].wr.rdma.remote_addr = remote_addr + assign->target_offsets[i];
+        wr[i].send_flags          = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
+        wr[i].wr.rdma.remote_addr = remote_addr + assign->batch_[i].target_offset;
         wr[i].wr.rdma.rkey        = remote_rkey;
-        wr[i].next                = (i == source_batch_size - 1) ? NULL : &wr[i + 1];
+        wr[i].next                = (i == batch_size - 1) ? NULL : &wr[i + 1];
     }
 
-    outstanding_rdma_reads_ += source_batch_size;
+    outstanding_rdma_reads_ += batch_size;
 
     int ret = 0;
     {
@@ -470,19 +469,18 @@ int64_t RDMAContext::cq_poll_handle()
                     status_code = wc[i].status;
                 }
                 if (wc[i].wr_id != 0) {
-                    Assignment* assign = reinterpret_cast<Assignment*>(wc[i].wr_id);
-                    switch (OpCode wr_type = assign->opcode) {
+                    RDMAAssignment* assign = reinterpret_cast<RDMAAssignment*>(wc[i].wr_id);
+                    switch (OpCode wr_type = assign->opcode_) {
                         case OpCode::READ:
                         case OpCode::SEND:
                         case OpCode::RECV:
-                            assign->callback(status_code);
+                            assign->callback_(status_code);
                             break;
                         default:
                             SLIME_ABORT("Unimplemented WrType " << int64_t(wr_type));
                     }
-                    size_t batch_size = assign->source_offsets.size();
+                    size_t batch_size = assign->batch_.size();
                     outstanding_rdma_reads_ -= batch_size;
-                    delete assign;
                 }
             }
         }
@@ -508,16 +506,16 @@ int64_t RDMAContext::wq_dispatch_handle()
         if (stop_wq_future_)
             return 0;
         while (!assign_queue_.empty()) {
-            Assignment* front_assign = new Assignment(assign_queue_.front());
-            size_t      batch_size   = front_assign->source_offsets.size();
+            RDMAAssignment* front_assign = assign_queue_.front();
+            size_t          batch_size   = front_assign->batch_.size();
             if (batch_size > MAX_SEND_WR) {
                 SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SEND WR(" << MAX_SEND_WR
                                               << "), this request will be ignored");
+                front_assign->callback_(0);
                 assign_queue_.pop();
             }
-            if (batch_size + outstanding_rdma_reads_ < MAX_SEND_WR) {
-                assign_queue_.pop();
-                switch (front_assign->opcode) {
+            else if (batch_size + outstanding_rdma_reads_ < MAX_SEND_WR) {
+                switch (front_assign->opcode_) {
                     case OpCode::SEND:
                         send_async(front_assign);
                         break;
@@ -530,6 +528,7 @@ int64_t RDMAContext::wq_dispatch_handle()
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");
                 }
+                assign_queue_.pop();
             }
             else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(2));

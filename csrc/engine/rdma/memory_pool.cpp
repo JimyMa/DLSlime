@@ -9,7 +9,7 @@
 #include <unordered_map>
 
 namespace slime {
-int MemoryPool::register_memory_region(std::string mr_key, uintptr_t data_ptr, uint64_t length)
+int MemoryPool::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
 {
     /* MemoryRegion Access Right = 777 */
     const static int access_rights = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
@@ -27,19 +27,20 @@ int MemoryPool::register_memory_region(std::string mr_key, uintptr_t data_ptr, u
     return 0;
 }
 
-int MemoryPool::unregister_memory_region(std::string mr_key)
+int MemoryPool::unregister_memory_region(const std::string& mr_key)
 {
     mrs_.erase(mr_key);
     return 0;
 }
 
-int MemoryPool::register_remote_memory_region(std::string mr_key, json mr_info)
+int MemoryPool::register_remote_memory_region(const std::string& mr_key, const json& mr_info)
 {
-    remote_mrs_[mr_key] = mr_info;
+    remote_mrs_[mr_key] =
+        remote_mr_t(mr_info["addr"].get<uintptr_t>(), mr_info["length"].get<size_t>(), mr_info["rkey"].get<uint32_t>());
     return 0;
 }
 
-int MemoryPool::unregister_remote_memory_region(std::string mr_key)
+int MemoryPool::unregister_remote_memory_region(const std::string& mr_key)
 {
     remote_mrs_.erase(mr_key);
     return 0;
@@ -62,7 +63,7 @@ json MemoryPool::remote_mr_info()
 {
     json mr_info;
     for (auto& mr : remote_mrs_) {
-        mr_info[mr.first] = remote_mrs_[mr.second];
+        mr_info[mr.first] = {{"addr", mr.second.addr}, {"rkey", mr.second.rkey}, {"length", mr.second.length}};
     }
     return mr_info;
 }

@@ -1,8 +1,8 @@
 
 #include <cassert>
-#include <cstdlib>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <future>
 #include <mutex>
 #include <stdexcept>
@@ -16,14 +16,13 @@
 #include <zmq.h>
 #include <zmq.hpp>
 
-
 #include "engine/assignment.h"
+#include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_scheduler.h"
 #include "engine/rdma/rdma_transport.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
-
 
 using json = nlohmann::json;
 using namespace slime;
@@ -40,7 +39,6 @@ DEFINE_string(target_addr, "10.130.8.139", "local endpoint");
 DEFINE_int32(target_port, 23344, "local endpoint");
 DEFINE_string(initiator_addr, "10.130.8.138", "remote endpoint");
 DEFINE_int32(initiator_port, 24433, "local endpoint");
-
 
 DEFINE_uint64(buffer_size, (2048000 * 160) + 1, "total size of data buffer");
 DEFINE_uint64(block_size, 2048000, "block size");
@@ -61,7 +59,7 @@ void* memory_allocate_initiator()
 void* memory_allocate_target()
 {
     SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
-    void* data = (void*)malloc(FLAGS_buffer_size);
+    void* data      = (void*)malloc(FLAGS_buffer_size);
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < FLAGS_buffer_size; ++i) {
         byte_data[i] = i % 128;
@@ -69,7 +67,8 @@ void* memory_allocate_target()
     return data;
 }
 
-bool checkInitiatorCopied(void* data) {
+bool checkInitiatorCopied(void* data)
+{
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < (FLAGS_batch_size * FLAGS_block_size); ++i) {
         if (byte_data[i] != i % 128) {
@@ -79,7 +78,6 @@ bool checkInitiatorCopied(void* data) {
     }
     return true;
 }
-
 
 int target()
 {
@@ -97,7 +95,7 @@ int target()
 int initiator()
 {
     void* data = memory_allocate_initiator();
-    
+
     RDMAScheduler scheduler;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
     std::cout << "Initiator registed MR" << std::endl;
@@ -113,20 +111,20 @@ int initiator()
 
     while (std::chrono::steady_clock::now() < deadline) {
 
-        std::vector<uintptr_t> target_offsets, source_offsets;
+        AssignmentBatch        batch;
 
         for (int i = 0; i < FLAGS_batch_size; ++i) {
-            source_offsets.emplace_back(i * FLAGS_block_size);
-            target_offsets.emplace_back(i * FLAGS_block_size);
+            Assignment assign = Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size);
+            batch.emplace_back(assign);
+            SLIME_LOG_DEBUG(assign.dump());
         }
 
         int done = false;
-        scheduler.submitAssignment(
-            Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
-                done = true;
-            }));
 
-        while (!done) {}
+        RDMASchedulerAssignment sch_assignment = scheduler.submitAssignment(batch);
+        SLIME_LOG_DEBUG(sch_assignment.dump());
+        sch_assignment.wait();
+
         total_bytes += FLAGS_batch_size * FLAGS_block_size;
         total_trips += 1;
     }

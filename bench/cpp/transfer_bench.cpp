@@ -1,4 +1,5 @@
 #include "engine/assignment.h"
+#include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_transport.h"
 #include "utils/json.hpp"
@@ -32,8 +33,8 @@ DEFINE_string(device_name, "mlx5_bond_0", "device name");
 DEFINE_uint32(ib_port, 1, "device name");
 DEFINE_string(link_type, "RoCE", "IB or RoCE");
 
-DEFINE_string(local_endpoint, "", "local endpoint");
-DEFINE_string(remote_endpoint, "", "remote endpoint");
+DEFINE_string(initiator_endpoint, "", "initiator endpoint");
+DEFINE_string(target_endpoint, "", "target endpoint");
 
 DEFINE_uint64(buffer_size, (1ull << 30) + 1, "total size of data buffer");
 DEFINE_uint64(block_size, 2048000, "block size");
@@ -100,8 +101,8 @@ int target(RDMAContext& rdma_context)
     zmq::socket_t  send(context, ZMQ_PUSH);
     zmq::socket_t  recv(context, ZMQ_PULL);
 
-    send.connect("tcp://" + FLAGS_remote_endpoint);
-    recv.bind("tcp://" + FLAGS_local_endpoint);
+    send.connect("tcp://" + FLAGS_initiator_endpoint);
+    recv.bind("tcp://" + FLAGS_target_endpoint);
 
     rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
@@ -124,8 +125,8 @@ int initiator(RDMAContext& rdma_context)
     zmq::socket_t  send(context, ZMQ_PUSH);
     zmq::socket_t  recv(context, ZMQ_PULL);
 
-    send.connect("tcp://" + FLAGS_remote_endpoint);
-    recv.bind("tcp://" + FLAGS_local_endpoint);
+    send.connect("tcp://" + FLAGS_target_endpoint);
+    recv.bind("tcp://" + FLAGS_initiator_endpoint);
 
     rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
@@ -136,7 +137,6 @@ int initiator(RDMAContext& rdma_context)
 
     rdma_context.launch_future();
 
-    // 新增变量：统计相关
     uint64_t total_bytes = 0;
     uint64_t total_trips = 0;
     size_t   step        = 0;
@@ -153,12 +153,15 @@ int initiator(RDMAContext& rdma_context)
         }
 
         int done = false;
-        rdma_context.submit(
-            Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
-                done = true;
-            }));
-
-        while (!done) {}
+        AssignmentBatch batch;
+        for (int i = 0; i < FLAGS_batch_size; ++i) {
+            batch.push_back(
+                Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size)
+            );
+        }
+        RDMAAssignment* rdma_assignment = new RDMAAssignment(OpCode::READ, batch);
+        rdma_context.submit(rdma_assignment);
+        RDMASchedulerAssignment({rdma_assignment}).wait();
         total_bytes += FLAGS_batch_size * FLAGS_block_size;
         total_trips += 1;
     }
@@ -189,6 +192,7 @@ int initiator(RDMAContext& rdma_context)
 int main(int argc, char** argv)
 {
     gflags::ParseCommandLineFlags(&argc, &argv, false);
+    std::cout << "benchmark begin" << std::endl;
     RDMAContext context;
     if (FLAGS_mode == "initiator") {
         return initiator(context);

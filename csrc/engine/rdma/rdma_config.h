@@ -13,6 +13,10 @@
 
 namespace slime {
 
+#define MAX_SEND_WR 8192
+#define MAX_RECV_WR 8192
+#define POLL_COUNT 256
+
 using json = nlohmann::json;
 
 typedef struct RDMAInfo {

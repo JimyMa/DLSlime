@@ -3,9 +3,14 @@
 #include "utils/logging.h"
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <vector>
 
 namespace slime {
+
+struct Assignment;
+
+using AssignmentBatch = std::vector<Assignment>;
 
 enum class OpCode : uint8_t {
     READ,
@@ -14,36 +19,33 @@ enum class OpCode : uint8_t {
 };
 
 struct Assignment {
-    Assignment(OpCode                   opcode,
-               std::string              mr_key,
-               std::vector<uint64_t>    target_offsets,
-               std::vector<uint64_t>    source_offsets,
-               uint64_t                 length,
-               std::function<void(int)> callback):
-        opcode(opcode),
-        mr_key(mr_key),
-        target_offsets(std::move(target_offsets)),
-        source_offsets(std::move(source_offsets)),
-        length(length),
-        callback(std::move(callback))
+    Assignment(std::string mr_key, uint64_t target_offset, uint64_t source_offset, uint64_t length):
+        mr_key(mr_key), target_offset(target_offset), source_offset(source_offset), length(length)
     {
-        if (target_offsets.size() != source_offsets.size())
-            SLIME_LOG_ERROR("target_ofsets.size() != source_offsets.size()");
     }
 
-    Assignment(Assignment&)       = default;
-    Assignment(const Assignment&) = default;
-    Assignment(Assignment&&)      = default;
+    Assignment(Assignment&)                        = default;
+    Assignment(const Assignment&)                  = default;
+    Assignment(Assignment&&)                       = default;
     Assignment& operator=(const Assignment& other) = default;
 
-    std::vector<Assignment> split(int step);
+    std::string dump()
+    {
+        return "Assignment (mr_key: " + mr_key + ", target_offset: " + std::to_string(target_offset) + ", source_offset: "
+               + std::to_string(source_offset) + ", length: " + std::to_string(length) + ")";
+    }
 
-    OpCode                   opcode;
-    std::string              mr_key;
-    std::vector<uint64_t>    source_offsets;
-    std::vector<uint64_t>    target_offsets;
-    uint64_t                 length;
-    std::function<void(int)> callback;
+    void print() {
+        std::cout << dump() << std::endl;
+    }
+
+    // std::vector<Assignment> split(int step);
+
+    OpCode      opcode;
+    std::string mr_key;
+    uint64_t    source_offset;
+    uint64_t    target_offset;
+    uint64_t    length;
 };
 
 }  // namespace slime

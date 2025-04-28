@@ -2,7 +2,7 @@ import asyncio  # For asynchronous operations
 
 import torch  # For GPU tensor management
 
-from dlslime import available_nic, RDMAEndpoint  # RDMA endpoint management
+from dlslime import available_nic, RDMAEndpoint, Assignment  # RDMA endpoint management
 
 
 devices = available_nic()
@@ -24,7 +24,7 @@ initiator.register_memory_region(
 target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
 
 # Create a one-initialized CUDA tensor on GPU 1 as remote buffer
-remote_tensor = torch.ones([16], device="cuda:1", dtype=torch.uint8)
+remote_tensor = torch.ones([16], device="cuda", dtype=torch.uint8)
 # Register target's GPU memory
 target.register_memory_region(
     mr_identifier="buffer",
@@ -43,14 +43,18 @@ initiator.connect_to(target.local_endpoint_info)
 # - Read 8 bytes from target's "buffer" at offset 0
 # - Write to initiator's "buffer" at offset 0
 # - asyncio.run() executes the async operation synchronously for demonstration
-asyncio.run(
-    initiator.read_batch_async(
-        mr_key="buffer",
-        target_offset=[0],
-        source_offset=[8],  # Write to start of local buffer
-        length=8,
-    )
+x = initiator.read_batch_async(
+    [
+        Assignment(
+            mr_key="buffer",
+            target_offset=0,
+            source_offset=8,
+            length=8
+        )
+    ],
+    async_op=True
 )
+x.wait()
 
 # Verify data transfer:
 # - Local tensor should now contain data from remote tensor's first 8 elements

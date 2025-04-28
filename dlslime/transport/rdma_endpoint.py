@@ -1,7 +1,8 @@
 import asyncio
-from typing import Dict, Any
+from typing import Any, Dict, List
 
 from dlslime import _slime_c
+from dlslime.assignment import Assignment
 
 class RDMAEndpoint:
     """Manages RDMA endpoint lifecycle including resource allocation and data operations.
@@ -146,12 +147,10 @@ class RDMAEndpoint:
 
         return await future
 
-    async def read_batch_async(
+    def read_batch_async(
         self,
-        mr_key: str,
-        target_offset: int,
-        source_offset: int,
-        length: int,
+        batch: List[Assignment],
+        async_op=False,
     ) -> int:
         """Perform batched read from remote MR to local buffer.
         
@@ -164,22 +163,20 @@ class RDMAEndpoint:
         Returns:
             ibv_wc_status code (0 = IBV_WC_SUCCESS)
         """
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-
-        def _completion_handler(status: int):
-            loop.call_soon_threadsafe(future.set_result, status)
-
-        self._ctx.submit(
-            _slime_c.Assignment(
-                _slime_c.OpCode.READ,
-                mr_key,
-                target_offset,
-                source_offset,
-                length,
-                _completion_handler
-            )
+        rdma_assignment = self._ctx.submit(
+            _slime_c.OpCode.READ,
+            [
+                _slime_c.Assignment(
+                    assign.mr_key,
+                    assign.target_offset,
+                    assign.source_offset,
+                    assign.length,
+                )
+                for assign in batch
+            ]
         )
-
-        return await future
+        if async_op:
+            return rdma_assignment
+        else:
+            return rdma_assignment.wait()
 

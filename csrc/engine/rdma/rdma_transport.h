@@ -2,6 +2,7 @@
 
 #include "engine/assignment.h"
 #include "engine/rdma/memory_pool.h"
+#include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 
 #include "utils/json.hpp"
@@ -54,7 +55,15 @@ public:
         return 0;
     }
 
-    int submit(Assignment assign);
+    /* Async RDMA SendRecv */
+    int64_t send_async(RDMAAssignment* assign);
+    int64_t recv_async(RDMAAssignment* assign);
+
+    /* Async RDMA Read */
+    int64_t read_batch_async(RDMAAssignment* assign);
+
+    /* Submit an assignment */
+    int submit(RDMAAssignment* assignment);
 
     void launch_future();
     void stop_future();
@@ -74,7 +83,8 @@ public:
         return json{{"rdma_info", local_rdma_info_.to_json()}, {"mr_info", memory_pool_.mr_info()}};
     }
 
-    std::string get_dev_ib() const {
+    std::string get_dev_ib() const
+    {
         return "@" + device_name_ + "#" + std::to_string(ib_port_);
     }
 
@@ -103,9 +113,9 @@ private:
     std::mutex rdma_post_send_mutex_;
 
     /* Assignment Queue */
-    std::mutex             assign_queue_mutex_;
-    std::queue<Assignment> assign_queue_;
-    std::atomic<int>       outstanding_rdma_reads_{0};
+    std::mutex                 assign_queue_mutex_;
+    std::queue<RDMAAssignment*>       assign_queue_;
+    std::atomic<int>           outstanding_rdma_reads_{0};
 
     /* Has Runnable Assignment */
     std::condition_variable has_runnable_event_;
@@ -116,17 +126,11 @@ private:
     std::atomic<bool> stop_cq_future_{false};
     std::atomic<bool> stop_wq_future_{false};
 
-    /* Async RDMA SendRecv */
-    int64_t send_async(Assignment* assign);
-    int64_t recv_async(Assignment* assign);
-
-    /* Async RDMA Read */
-    int64_t read_batch_async(Assignment* assign);
-
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
     /* Working Queue Dispatch */
     int64_t wq_dispatch_handle();
+
 };
 
 }  // namespace slime

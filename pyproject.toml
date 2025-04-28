@@ -16,8 +16,6 @@ classifiers = [
     "License :: OSI Approved :: BSD License",
     "Operating System :: POSIX :: Linux",
     "Operating System :: Unix",
-    "Environment :: GPU",
-    "Environment :: GPU :: NVIDIA CUDA",
 ]
 
 [project.urls]

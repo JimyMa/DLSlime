@@ -57,8 +57,6 @@ public:
     int waitRemoteTeriminate();
 
 private:
-    bool canCombineAssignment(const Assignment& a1, const Assignment& a2) const;
-
     int selectRdma();
 
     json rdma_exchange_info();

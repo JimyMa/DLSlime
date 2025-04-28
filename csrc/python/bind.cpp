@@ -3,7 +3,6 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_transport.h"
 
-#include "ops/ops.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
 #include "utils/utils.h"
@@ -25,7 +24,7 @@ PYBIND11_MODULE(_slime_c, m)
         .value("SEND", slime::OpCode::SEND)
         .value("RECV", slime::OpCode::RECV);
     py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
-    py::class_<slime::RDMASchedulerAssignment, std::shared_ptr<slime::RDMASchedulerAssignment>>(m, "RDMAAssignment")
+    py::class_<slime::RDMASchedulerAssignment, std::shared_ptr<slime::RDMASchedulerAssignment>>(m, "RDMASchedulerAssignment")
         .def("wait", &slime::RDMASchedulerAssignment::wait, py::call_guard<py::gil_scoped_release>());
     py::class_<slime::RDMAContext>(m, "rdma_context")
         .def(py::init<>())
@@ -55,11 +54,8 @@ PYBIND11_MODULE(_slime_c, m)
                 self.submit(rdma_assignment);
                 return std::make_shared<slime::RDMASchedulerAssignment>(slime::RDMAAssignmentPtrBatch{rdma_assignment});
             },
-            py::return_value_policy::take_ownership,
             py::call_guard<py::gil_scoped_release>());
 
     m.def("available_nic", &slime::available_nic);
 
-    m.def("gather", &slime::gather);
-    m.def("scatter", &slime::scatter);
 }

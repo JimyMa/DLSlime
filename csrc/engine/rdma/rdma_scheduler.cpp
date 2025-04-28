@@ -184,11 +184,6 @@ int RDMAScheduler::waitRemoteTeriminate()
     return -1;
 }
 
-bool RDMAScheduler::canCombineAssignment(const Assignment& a1, const Assignment& a2) const
-{
-    return a1.opcode == a2.opcode && a1.mr_key == a2.mr_key && a1.length == a2.length;
-}
-
 int RDMAScheduler::selectRdma()
 {
     // Simplest round robin, we could enrich it in the future

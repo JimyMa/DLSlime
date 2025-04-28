@@ -2,6 +2,7 @@ add_library(
     _slime_rdma
     SHARED
     memory_pool.cpp
+    rdma_assignment.cpp
     rdma_transport.cpp
     rdma_scheduler.cpp
 )

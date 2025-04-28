@@ -113,9 +113,9 @@ private:
     std::mutex rdma_post_send_mutex_;
 
     /* Assignment Queue */
-    std::mutex                 assign_queue_mutex_;
-    std::queue<RDMAAssignment*>       assign_queue_;
-    std::atomic<int>           outstanding_rdma_reads_{0};
+    std::mutex                  assign_queue_mutex_;
+    std::queue<RDMAAssignment*> assign_queue_;
+    std::atomic<int>            outstanding_rdma_reads_{0};
 
     /* Has Runnable Assignment */
     std::condition_variable has_runnable_event_;
@@ -130,7 +130,6 @@ private:
     int64_t cq_poll_handle();
     /* Working Queue Dispatch */
     int64_t wq_dispatch_handle();
-
 };
 
 }  // namespace slime

@@ -17,7 +17,8 @@ namespace slime {
 
 class RDMAContext;
 class RDMAScheduler;
-struct RDMAAssignment;
+class RDMAAssignment;
+class RDMASchedulerAssignment;
 
 using callback_fn_t          = std::function<void(int)>;
 using RDMAAssignmentPtr      = RDMAAssignment*;
@@ -31,28 +32,13 @@ class RDMAAssignment {
 public:
     RDMAAssignment(OpCode opcode, AssignmentBatch& batch): opcode_(opcode), batch_(std::move(batch)) {}
 
-    void wait()
-    {
-        std::unique_lock<std::mutex> lock(mutex_);
-        done_cv_.wait(lock, [this]() { return finished_; });
-        return;
-    }
+    inline size_t batch_size();
 
-    inline size_t batch_size() {
-        return batch_.size();
-    }
+    void query();
+    void wait();
 
-    std::string dump() {
-        std::string rdma_assignment_dump = "";
-        for (Assignment& assignment : batch_) {
-            rdma_assignment_dump += assignment.dump() + "\n";
-        }
-        return rdma_assignment_dump;
-    }
-
-    void print() {
-        std::cout << dump() << std::endl;
-    }
+    std::string dump();
+    void        print();
 
 private:
     OpCode          opcode_;
@@ -69,42 +55,24 @@ private:
     bool finished_{false};
 };
 
-
 class RDMASchedulerAssignment {
     friend class RDMAScheduler;
+
 public:
-    RDMASchedulerAssignment(RDMAAssignmentPtrBatch rdma_assignment_batch) : rdma_assignment_batch_(std::move(rdma_assignment_batch)) {}
-    ~RDMASchedulerAssignment() {
-        for (RDMAAssignmentPtr& rdma_assignment : rdma_assignment_batch_) {
-            delete rdma_assignment;
-        }
+    RDMASchedulerAssignment(RDMAAssignmentPtrBatch rdma_assignment_batch):
+        rdma_assignment_batch_(std::move(rdma_assignment_batch))
+    {
     }
-    void wait() {
-        for (RDMAAssignmentPtr& rdma_assignment : rdma_assignment_batch_) {
-            rdma_assignment->wait();
-        }
-        return;
-    }
+    ~RDMASchedulerAssignment();
 
-    std::string dump() {
-        size_t cnt = 0;
-        std::string rdma_scheduler_assignment_dump = "Scheduler Assignment: {\n";
-        for (size_t i = 0; i < rdma_assignment_batch_.size(); ++i) {
-            rdma_scheduler_assignment_dump += "RDMAAssignment_" + std::to_string(i) + " (\n";
-            rdma_scheduler_assignment_dump += rdma_assignment_batch_[i]->dump();
-            rdma_scheduler_assignment_dump += ")\n";
-        }
-        rdma_scheduler_assignment_dump += "}";
-        return rdma_scheduler_assignment_dump;
-    }
+    void query();
+    void wait();
 
-    void print() {
-        std::cout << dump() << std::endl;
-    }
+    std::string dump();
+    void        print();
 
 private:
     RDMAAssignmentPtrBatch rdma_assignment_batch_{};
 };
-
 
 }  // namespace slime

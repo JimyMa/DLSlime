@@ -16,4 +16,8 @@ set_target_properties(
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "\${ORIGIN}"
 )
+
+if (BUILD_RDMA)
+
+
 endif (BUILD_PYTHON)

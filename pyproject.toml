@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "dlslime"
-version = "0.0.1.post6"
+version = "0.0.1.post5"
 description = "DLSlime Transfer Engine"
 authors = [
     {name = "JimyMa", email = "hit16s105116@gmail.com"}

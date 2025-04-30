@@ -308,7 +308,7 @@ int RDMAContext::submit(RDMAAssignment* rdma_assignment)
     return 0;
 }
 
-int64_t RDMAContext::send_async(RDMAAssignment* assign)
+int64_t RDMAContext::post_send(RDMAAssignment* assign)
 {
     int ret;
 
@@ -343,7 +343,7 @@ int64_t RDMAContext::send_async(RDMAAssignment* assign)
     return 0;
 }
 
-int64_t RDMAContext::recv_async(RDMAAssignment* assign)
+int64_t RDMAContext::post_recv(RDMAAssignment* assign)
 {
     int ret;
 
@@ -376,7 +376,7 @@ int64_t RDMAContext::recv_async(RDMAAssignment* assign)
     return 0;
 }
 
-int64_t RDMAContext::read_batch_async(RDMAAssignment* assign)
+int64_t RDMAContext::post_read_batch(RDMAAssignment* assign)
 {
     size_t              batch_size = assign->batch_.size();
     struct ibv_send_wr* bad_wr     = NULL;
@@ -517,13 +517,13 @@ int64_t RDMAContext::wq_dispatch_handle()
             else if (batch_size + outstanding_rdma_reads_ < MAX_SEND_WR) {
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
-                        send_async(front_assign);
+                        post_send(front_assign);
                         break;
                     case OpCode::RECV:
-                        recv_async(front_assign);
+                        post_recv(front_assign);
                         break;
                     case OpCode::READ:
-                        read_batch_async(front_assign);
+                        post_read_batch(front_assign);
                         break;
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");

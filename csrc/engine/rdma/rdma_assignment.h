@@ -31,6 +31,10 @@ class RDMAAssignment {
 
 public:
     RDMAAssignment(OpCode opcode, AssignmentBatch& batch): opcode_(opcode), batch_(std::move(batch)) {}
+    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback):
+        opcode_(opcode), batch_(std::move(batch)), callback_(std::move(callback))
+    {
+    }
 
     inline size_t batch_size();
 

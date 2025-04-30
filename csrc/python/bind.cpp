@@ -24,7 +24,8 @@ PYBIND11_MODULE(_slime_c, m)
         .value("SEND", slime::OpCode::SEND)
         .value("RECV", slime::OpCode::RECV);
     py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
-    py::class_<slime::RDMASchedulerAssignment, std::shared_ptr<slime::RDMASchedulerAssignment>>(m, "RDMASchedulerAssignment")
+    py::class_<slime::RDMASchedulerAssignment, std::shared_ptr<slime::RDMASchedulerAssignment>>(
+        m, "RDMASchedulerAssignment")
         .def("wait", &slime::RDMASchedulerAssignment::wait, py::call_guard<py::gil_scoped_release>());
     py::class_<slime::RDMAContext>(m, "rdma_context")
         .def(py::init<>())
@@ -49,13 +50,23 @@ PYBIND11_MODULE(_slime_c, m)
         .def("stop_future", &slime::RDMAContext::stop_future)
         .def(
             "submit",
-            [](slime::RDMAContext& self, slime::OpCode opcode, slime::AssignmentBatch batch) {
+            [](slime::RDMAContext& self, slime::OpCode opcode, slime::AssignmentBatch& batch) {
                 slime::RDMAAssignment* rdma_assignment = new slime::RDMAAssignment(opcode, batch);
+                self.submit(rdma_assignment);
+                return std::make_shared<slime::RDMASchedulerAssignment>(slime::RDMAAssignmentPtrBatch{rdma_assignment});
+            },
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "submit_with_callback",
+            [](slime::RDMAContext&      self,
+               slime::OpCode            opcode,
+               slime::AssignmentBatch&  batch,
+               std::function<void(int)> callback) {
+                slime::RDMAAssignment* rdma_assignment = new slime::RDMAAssignment(opcode, batch, callback);
                 self.submit(rdma_assignment);
                 return std::make_shared<slime::RDMASchedulerAssignment>(slime::RDMAAssignmentPtrBatch{rdma_assignment});
             },
             py::call_guard<py::gil_scoped_release>());
 
     m.def("available_nic", &slime::available_nic);
-
 }

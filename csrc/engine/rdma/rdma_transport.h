@@ -56,11 +56,11 @@ public:
     }
 
     /* Async RDMA SendRecv */
-    int64_t send_async(RDMAAssignment* assign);
-    int64_t recv_async(RDMAAssignment* assign);
+    int64_t post_send(RDMAAssignment* assign);
+    int64_t post_recv(RDMAAssignment* assign);
 
     /* Async RDMA Read */
-    int64_t read_batch_async(RDMAAssignment* assign);
+    int64_t post_read_batch(RDMAAssignment* assign);
 
     /* Submit an assignment */
     int submit(RDMAAssignment* assignment);

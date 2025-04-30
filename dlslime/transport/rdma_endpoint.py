@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Tuple
 
 from dlslime import _slime_c
 from dlslime.assignment import Assignment
@@ -31,6 +31,7 @@ class RDMAEndpoint:
         """
         self._ctx = _slime_c.rdma_context()
         self.initialize_endpoint(device_name, ib_port, link_type)
+        self.assignment_with_callback = {}
 
     @property
     def local_endpoint_info(self) -> Dict[str, Any]:
@@ -118,7 +119,26 @@ class RDMAEndpoint:
 
         return await future
 
-    def read_batch_async(
+    def read_batch_with_callback(self, batch: List[Assignment], callback: Callable[[int], None]):
+        callback_obj_id = id(callback)
+        def delete_assignment_callback(code: int):
+            callback(code)
+            del self.assignment_with_callback[callback_obj_id]
+        rdma_assignment = self._ctx.submit_with_callback(
+            _slime_c.OpCode.READ,
+            [
+                _slime_c.Assignment(
+                    assign.mr_key,
+                    assign.target_offset,
+                    assign.source_offset,
+                    assign.length,
+                ) for assign in batch
+            ],
+            delete_assignment_callback)
+        self.assignment_with_callback[callback_obj_id] = rdma_assignment
+        return rdma_assignment
+
+    def read_batch(
         self,
         batch: List[Assignment],
         async_op=False,

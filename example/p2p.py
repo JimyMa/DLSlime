@@ -1,3 +1,5 @@
+import asyncio
+
 import torch  # For GPU tensor management
 
 from dlslime import Assignment, RDMAEndpoint, available_nic  # RDMA endpoint management
@@ -39,8 +41,31 @@ initiator.connect_to(target.local_endpoint_info)
 # - Read 8 bytes from target's "buffer" at offset 0
 # - Write to initiator's "buffer" at offset 0
 # - asyncio.run() executes the async operation synchronously for demonstration
-x = initiator.read_batch_async([Assignment(mr_key='buffer', target_offset=0, source_offset=8, length=8)], async_op=True)
+
+# run with async
+x = initiator.read_batch([Assignment(mr_key='buffer', target_offset=0, source_offset=8, length=8)], async_op=True)
 x.wait()
+
+# run with coroutine
+async def read_batch_coroutine():
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+    
+    def _completion_handler(status: int):
+        loop.call_soon_threadsafe(future.set_result, status)
+
+    initiator.read_batch_with_callback(
+        [
+            Assignment(
+                mr_key='buffer',
+                target_offset=0,
+                source_offset=8,
+                length=8)
+        ],
+        _completion_handler
+    )
+    await future
+asyncio.run(read_batch_coroutine()) 
 
 # Verify data transfer:
 # - Local tensor should now contain data from remote tensor's first 8 elements

@@ -1,29 +1,31 @@
 [build-system]
-requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
 build-backend = "scikit_build_core.build"
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
 
 [project]
-name = "dlslime"
-version = "0.0.1.post5"
-description = "DLSlime Transfer Engine"
 authors = [
-    {name = "JimyMa", email = "hit16s105116@gmail.com"}
+  {name = "JimyMa", email = "hit16s105116@gmail.com"},
 ]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Unix",
+]
+description = "DLSlime Transfer Engine"
+name = "dlslime"
 readme = "README.md"
 requires-python = ">=3.8"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: BSD License",
-    "Operating System :: POSIX :: Linux",
-    "Operating System :: Unix",
-]
+version = "0.0.1.post6"
 
 [project.urls]
 Homepage = "https://github.com/JimyMa/dlslime.git"
 Repository = "https://github.com/JimyMa/dlslime.git"
 
 [tool.scikit-build]
-cmake.build-type = "Release"
 cmake.args = [
-    "-DBUILD_PYTHON=ON",
+  "-DDLSLIME_INSTALL_PATH=dlslime",
+  "-DBUILD_PYTHON=ON",
+  "-DBUILD_NVLINK=ON",
 ]
+cmake.build-type = "Release"

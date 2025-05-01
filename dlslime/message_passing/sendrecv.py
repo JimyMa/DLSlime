@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple
 import torch
 import zmq
 
-from dlslime.transport.rdma_endpoint import RDMAContext
+from dlslime.remote_io.rdma_endpoint import RDMAContext
 
 
 class TransferEngine:

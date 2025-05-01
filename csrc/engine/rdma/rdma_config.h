@@ -43,7 +43,7 @@ typedef struct RDMAInfo {
         mtu                      = json_config["mtu"];
     }
 
-    json to_json()
+    json to_json() const
     {
         json gid_config{{"subnet_prefix", gid.global.subnet_prefix}, {"interface_id", gid.global.interface_id}};
         return json{{"gid", gid_config}, {"gidx", gidx}, {"lid", lid}, {"qpn", qpn}, {"psn", psn}, {"mtu", mtu}};

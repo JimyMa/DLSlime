@@ -54,7 +54,7 @@ void* memory_allocate_initiator()
 void* memory_allocate_target()
 {
     SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
-    void* data = (void*)malloc(FLAGS_buffer_size);
+    void* data      = (void*)malloc(FLAGS_buffer_size);
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < FLAGS_buffer_size; ++i) {
         byte_data[i] = i % 128;
@@ -62,7 +62,8 @@ void* memory_allocate_target()
     return data;
 }
 
-bool checkInitiatorCopied(void* data) {
+bool checkInitiatorCopied(void* data)
+{
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < (FLAGS_batch_size * FLAGS_block_size); ++i) {
         if (byte_data[i] != i % 128) {
@@ -75,7 +76,7 @@ bool checkInitiatorCopied(void* data) {
 
 int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
 {
-    json local_info = rdma_context.local_info();
+    json local_info = rdma_context.endpoint_info();
 
     zmq::message_t local_msg(local_info.dump());
     send.send(local_msg, zmq::send_flags::none);
@@ -85,8 +86,7 @@ int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
     std::string remote_msg_str(static_cast<const char*>(remote_msg.data()), remote_msg.size());
 
     json remote_info = json::parse(remote_msg_str);
-
-    rdma_context.connect_to(RDMAInfo(remote_info["rdma_info"]));
+    rdma_context.connect(remote_info["rdma_info"]);
     for (auto& item : remote_info["mr_info"].items()) {
         rdma_context.register_remote_memory_region(item.key(), item.value());
     }
@@ -151,15 +151,12 @@ int initiator(RDMAContext& rdma_context)
             target_offsets.emplace_back(i * FLAGS_block_size);
         }
 
-        int done = false;
+        int             done = false;
         AssignmentBatch batch;
         for (int i = 0; i < FLAGS_batch_size; ++i) {
-            batch.push_back(
-                Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size)
-            );
+            batch.push_back(Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size));
         }
-        RDMAAssignment* rdma_assignment = new RDMAAssignment(OpCode::READ, batch);
-        rdma_context.submit(rdma_assignment);
+        RDMAAssignmentPtr rdma_assignment = rdma_context.submit(OpCode::READ, batch);
         RDMASchedulerAssignment({rdma_assignment}).wait();
         total_bytes += FLAGS_batch_size * FLAGS_block_size;
         total_trips += 1;

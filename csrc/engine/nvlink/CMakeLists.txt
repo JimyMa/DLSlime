@@ -1,16 +1,14 @@
 add_library(
-    _slime_rdma
+    _slime_nvlink
     SHARED
     memory_pool.cpp
-    rdma_assignment.cpp
-    rdma_transport.cpp
-    rdma_scheduler.cpp
+    nvlink_transport.cpp
 )
 
-target_link_libraries(_slime_rdma PUBLIC _slime_engine _slime_utils ibverbs)
+target_link_libraries(_slime_nvlink PUBLIC CUDA::cudart)
 
 set_target_properties(
-    _slime_rdma
+    _slime_nvlink
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "\${ORIGIN}"
@@ -18,6 +16,6 @@ set_target_properties(
 
 install(
     TARGETS
-    _slime_rdma
+    _slime_nvlink
     LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
 )

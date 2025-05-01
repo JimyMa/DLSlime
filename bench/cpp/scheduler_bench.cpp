@@ -2,6 +2,7 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <future>
 #include <mutex>
 #include <stdexcept>
@@ -47,6 +48,65 @@ DEFINE_uint64(duration, 10, "duration (s)");
 
 json mr_info;
 
+zmq::context_t* tcp_context_ = nullptr;
+zmq::socket_t*  send_        = nullptr;
+zmq::socket_t*  recv_        = nullptr;
+
+void resetTcpSockets()
+{
+    if (send_ != nullptr) {
+        send_->close();
+        delete send_;
+        send_ = nullptr;
+    }
+    if (recv_ != nullptr) {
+        recv_->close();
+        delete recv_;
+        recv_ = nullptr;
+    }
+    if (tcp_context_ != nullptr) {
+        tcp_context_->close();
+        delete tcp_context_;
+        tcp_context_ = nullptr;
+    }
+}
+
+int waitRemoteTeriminate()
+{
+    zmq::message_t term_msg;
+    recv_->recv(term_msg, zmq::recv_flags::none);
+    std::string signal = std::string(static_cast<char*>(term_msg.data()), term_msg.size());
+    if (signal == "TERMINATE") {
+        resetTcpSockets();
+        return 0;
+    }
+    return -1;
+}
+
+int teriminate()
+{
+    zmq::message_t term_msg("TERMINATE");
+    send_->send(term_msg, zmq::send_flags::none);
+    resetTcpSockets();
+    return 0;
+}
+
+void init_connection(RDMAScheduler& scheduler, std::string remote_addr, int32_t remote_port, int32_t local_port)
+{
+    tcp_context_ = new zmq::context_t(2);
+    send_        = new zmq::socket_t(*tcp_context_, ZMQ_PUSH);
+    recv_        = new zmq::socket_t(*tcp_context_, ZMQ_PULL);
+    send_->connect("tcp://" + remote_addr + ":" + std::to_string(remote_port));
+    recv_->bind("tcp://*:" + std::to_string(local_port));
+    json           local_info = scheduler.rdma_exchange_info();
+    zmq::message_t local_msg(local_info.dump());
+    send_->send(local_msg, zmq::send_flags::none);
+    zmq::message_t remote_msg;
+    recv_->recv(remote_msg, zmq::recv_flags::none);
+    std::string remote_msg_str(static_cast<const char*>(remote_msg.data()), remote_msg.size());
+    scheduler.connect(json::parse(remote_msg_str));
+}
+
 void* memory_allocate_initiator()
 {
     SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
@@ -85,9 +145,9 @@ int target()
     RDMAScheduler scheduler;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
     std::cout << "Target registered MR" << std::endl;
-    scheduler.connectRemoteNode(FLAGS_initiator_addr, FLAGS_initiator_port, FLAGS_target_port);
+    init_connection(scheduler, FLAGS_initiator_addr, FLAGS_initiator_port, FLAGS_target_port);
     std::cout << "Target connected remote" << std::endl;
-    scheduler.waitRemoteTeriminate();
+    waitRemoteTeriminate();
     return 0;
 }
 
@@ -98,7 +158,7 @@ int initiator()
     RDMAScheduler scheduler;
     scheduler.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
     std::cout << "Initiator registered MR" << std::endl;
-    scheduler.connectRemoteNode(FLAGS_target_addr, FLAGS_target_port, FLAGS_initiator_port);
+    init_connection(scheduler, FLAGS_target_addr, FLAGS_target_port, FLAGS_initiator_port);
     std::cout << "Initiator connected remote" << std::endl;
 
     // 新增变量：统计相关
@@ -110,7 +170,7 @@ int initiator()
 
     while (std::chrono::steady_clock::now() < deadline) {
 
-        AssignmentBatch        batch;
+        AssignmentBatch batch;
 
         for (int i = 0; i < FLAGS_batch_size; ++i) {
             Assignment assign = Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size);
@@ -120,7 +180,7 @@ int initiator()
 
         int done = false;
 
-        RDMASchedulerAssignment sch_assignment = scheduler.submitAssignment(batch);
+        RDMASchedulerAssignment sch_assignment = scheduler.submitAssignment(OpCode::READ, batch);
         SLIME_LOG_DEBUG(sch_assignment.dump());
         sch_assignment.wait();
 
@@ -141,7 +201,7 @@ int initiator()
     std::cout << "Average Latency   : " << duration / total_trips * 1000 << " ms/trip" << std::endl;
     std::cout << "Throughput        : " << throughput << " MiB/s" << std::endl;
 
-    scheduler.teriminate();
+    teriminate();
 
     SLIME_ASSERT(checkInitiatorCopied(data), "Transferred data not equal!");
 

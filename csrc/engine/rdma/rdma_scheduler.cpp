@@ -5,8 +5,6 @@
 #include <random>
 #include <vector>
 
-#include <zmq.hpp>
-
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
 #include "utils/utils.h"
@@ -38,7 +36,6 @@ RDMAScheduler::~RDMAScheduler()
     for (RDMAContext& ctx : rdma_ctxs_) {
         ctx.stop_future();
     }
-    resetTcpSockets();
 }
 
 int64_t RDMAScheduler::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
@@ -61,38 +58,18 @@ int64_t RDMAScheduler::register_memory_region(const std::string& mr_key, uintptr
     return slices.size();
 }
 
-int RDMAScheduler::connectRemoteNode(const std::string& remote_addr, int remote_port, int local_port)
+int RDMAScheduler::connect(const json& remote_info)
 {
-    resetTcpSockets();
-    tcp_context_ = new zmq::context_t(2);
-    send_        = new zmq::socket_t(*tcp_context_, ZMQ_PUSH);
-    recv_        = new zmq::socket_t(*tcp_context_, ZMQ_PULL);
-    send_->connect("tcp://" + remote_addr + ":" + std::to_string(remote_port));
-    recv_->bind("tcp://*:" + std::to_string(local_port));
-    json local_info = rdma_exchange_info();
-
-    zmq::message_t local_msg(local_info.dump());
-    send_->send(local_msg, zmq::send_flags::none);
-
-    zmq::message_t remote_msg;
-    recv_->recv(remote_msg, zmq::recv_flags::none);
-    std::string remote_msg_str(static_cast<const char*>(remote_msg.data()), remote_msg.size());
-
-    json remote_info = json::parse(remote_msg_str);
-
     SLIME_ASSERT_EQ(
         rdma_ctxs_.size(), remote_info.size(), "Currently only support two nodes with same number of RDMA devices");
     for (int i = 0; i < rdma_ctxs_.size(); ++i) {
-        rdma_ctxs_[i].connect_to(RDMAInfo(remote_info[i]["rdma_info"]));
-        for (auto& item : remote_info[i]["mr_info"].items()) {
-            rdma_ctxs_[i].register_remote_memory_region(item.key(), item.value());
-        }
+        rdma_ctxs_[i].connect(remote_info[i]);
         rdma_ctxs_[i].launch_future();
     }
     return 0;
 }
 
-RDMASchedulerAssignment RDMAScheduler::submitAssignment(AssignmentBatch& batch)
+RDMASchedulerAssignment RDMAScheduler::submitAssignment(OpCode opcode, AssignmentBatch& batch)
 {
     size_t batch_size = batch.size();
     rdma_index_to_assignments_.clear();
@@ -100,11 +77,11 @@ RDMASchedulerAssignment RDMAScheduler::submitAssignment(AssignmentBatch& batch)
         // Get assignment actual rdma_context
         Assignment& assignment = batch[i];
         SLIME_ASSERT(virtual_mr_to_actual_mr_.count(assignment.mr_key), "submitAssignment with non-exist MR Key");
-        const std::map<uintptr_t, DevMrSlice>& slices = virtual_mr_to_actual_mr_[assignment.mr_key];
-        uintptr_t origin_data_ptr = slices.begin()->first;
-        uintptr_t offset_data_ptr = assignment.source_offset + origin_data_ptr;
-        auto      gt_offset_iter  = slices.upper_bound(offset_data_ptr);
-        auto      le_offset_iter  = --gt_offset_iter;
+        const std::map<uintptr_t, DevMrSlice>& slices          = virtual_mr_to_actual_mr_[assignment.mr_key];
+        uintptr_t                              origin_data_ptr = slices.begin()->first;
+        uintptr_t                              offset_data_ptr = assignment.source_offset + origin_data_ptr;
+        auto                                   gt_offset_iter  = slices.upper_bound(offset_data_ptr);
+        auto                                   le_offset_iter  = --gt_offset_iter;
         ++gt_offset_iter;
         uintptr_t actual_data_ptr = le_offset_iter->first;
         uintptr_t next_data_ptr   = gt_offset_iter->first;
@@ -149,39 +126,12 @@ RDMASchedulerAssignment RDMAScheduler::submitAssignment(AssignmentBatch& batch)
     split_assignment_done_cnt_.store(0, std::memory_order_relaxed);
     RDMAAssignmentPtrBatch rdma_assignment_batch;
     for (auto& p : rdma_index_to_assignments_) {
-        AssignmentBatch& assignments = p.second;
-        RDMAContext&     rdma_ctx    = rdma_ctxs_[p.first];
-        RDMAAssignmentPtr rdma_assignment = new RDMAAssignment(OpCode::READ, assignments);
-        rdma_ctx.submit(rdma_assignment);
+        AssignmentBatch&  assignments     = p.second;
+        RDMAContext&      rdma_ctx        = rdma_ctxs_[p.first];
+        RDMAAssignmentPtr rdma_assignment = rdma_ctx.submit(opcode, assignments);
         rdma_assignment_batch.push_back(rdma_assignment);
     }
     return RDMASchedulerAssignment(rdma_assignment_batch);
-}
-
-int RDMAScheduler::teriminate()
-{
-    zmq::message_t term_msg("TERMINATE");
-    send_->send(term_msg, zmq::send_flags::none);
-    for (RDMAContext& ctx : rdma_ctxs_) {
-        ctx.stop_future();
-    }
-    resetTcpSockets();
-    return 0;
-}
-
-int RDMAScheduler::waitRemoteTeriminate()
-{
-    zmq::message_t term_msg;
-    recv_->recv(term_msg, zmq::recv_flags::none);
-    std::string signal = std::string(static_cast<char*>(term_msg.data()), term_msg.size());
-    if (signal == "TERMINATE") {
-        for (RDMAContext& ctx : rdma_ctxs_) {
-            ctx.stop_future();
-        }
-        resetTcpSockets();
-        return 0;
-    }
-    return -1;
 }
 
 int RDMAScheduler::selectRdma()
@@ -195,28 +145,9 @@ json RDMAScheduler::rdma_exchange_info()
 {
     json json_info = json();
     for (int i = 0; i < rdma_ctxs_.size(); ++i) {
-        json_info[i] = rdma_ctxs_[i].local_info();
+        json_info[i] = rdma_ctxs_[i].endpoint_info();
     }
     return json_info;
-}
-
-void RDMAScheduler::resetTcpSockets()
-{
-    if (send_ != nullptr) {
-        send_->close();
-        delete send_;
-        send_ = nullptr;
-    }
-    if (recv_ != nullptr) {
-        recv_->close();
-        delete recv_;
-        recv_ = nullptr;
-    }
-    if (tcp_context_ != nullptr) {
-        tcp_context_->close();
-        delete tcp_context_;
-        tcp_context_ = nullptr;
-    }
 }
 
 }  // namespace slime

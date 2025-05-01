@@ -24,6 +24,7 @@ using callback_fn_t          = std::function<void(int)>;
 using RDMAAssignmentPtr      = RDMAAssignment*;
 using RDMAAssignmentPtrBatch = std::vector<RDMAAssignmentPtr>;
 
+// TODO (Jimy): add timeout check
 const std::chrono::milliseconds kNoTimeout = std::chrono::milliseconds::zero();
 
 class RDMAAssignment {
@@ -31,9 +32,10 @@ class RDMAAssignment {
 
 public:
     RDMAAssignment(OpCode opcode, AssignmentBatch& batch): opcode_(opcode), batch_(std::move(batch)) {}
-    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback):
-        opcode_(opcode), batch_(std::move(batch)), callback_(std::move(callback))
+    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback): RDMAAssignment(opcode, batch)
     {
+        if (callback)
+            callback_ = std::move(callback);
     }
 
     inline size_t batch_size();

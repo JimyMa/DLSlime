@@ -105,7 +105,7 @@ int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string lin
         gidx = -1;
     }
     else {
-        gidx = ibv_find_sgid_type(ib_ctx_, ib_port_, IBV_GID_TYPE_ROCE_V2, AF_INET);
+        gidx = ibv_find_sgid_type(ib_ctx_, ib_port_, ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V2, AF_INET);
         if (gidx < 0) {
             SLIME_LOG_ERROR("Failed to find GID");
             return -1;
@@ -121,7 +121,7 @@ int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string lin
         SLIME_LOG_ERROR("Failed to allocate PD");
         return -1;
     }
-    memory_pool_ = MemoryPool(pd_);
+    memory_pool_ = RDMAMemoryPool(pd_);
 
     /* Alloc Complete Queue (CQ) */
     SLIME_ASSERT(ib_ctx_, "init rdma context first");
@@ -183,8 +183,16 @@ int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string lin
     return 0;
 }
 
-int64_t RDMAContext::connect_to(RDMAInfo remote_rdma_info)
+int64_t RDMAContext::connect(const json& endpoint_info_json)
 {
+    // Register Remote Memory Region
+    for (auto& item : endpoint_info_json["mr_info"].items()) {
+        register_remote_memory_region(item.key(), item.value());
+    }
+
+    // construct RDMAEndpoint connection
+    RDMAInfo remote_rdma_info = RDMAInfo(endpoint_info_json["rdma_info"]);
+
     int                ret;
     struct ibv_qp_attr attr = {};
     int                flags;
@@ -299,16 +307,16 @@ void RDMAContext::stop_future()
     }
 }
 
-int RDMAContext::submit(RDMAAssignment* rdma_assignment)
+RDMAAssignmentPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
     std::unique_lock<std::mutex> lock(assign_queue_mutex_);
-
+    slime::RDMAAssignmentPtr     rdma_assignment = new slime::RDMAAssignment(opcode, batch, callback);
     assign_queue_.push(rdma_assignment);
     has_runnable_event_.notify_one();
-    return 0;
+    return rdma_assignment;
 }
 
-int64_t RDMAContext::post_send(RDMAAssignment* assign)
+int64_t RDMAContext::post_send(RDMAAssignmentPtr assign)
 {
     int ret;
 
@@ -343,7 +351,7 @@ int64_t RDMAContext::post_send(RDMAAssignment* assign)
     return 0;
 }
 
-int64_t RDMAContext::post_recv(RDMAAssignment* assign)
+int64_t RDMAContext::post_recv(RDMAAssignmentPtr assign)
 {
     int ret;
 
@@ -376,7 +384,7 @@ int64_t RDMAContext::post_recv(RDMAAssignment* assign)
     return 0;
 }
 
-int64_t RDMAContext::post_read_batch(RDMAAssignment* assign)
+int64_t RDMAContext::post_read_batch(RDMAAssignmentPtr assign)
 {
     size_t              batch_size = assign->batch_.size();
     struct ibv_send_wr* bad_wr     = NULL;
@@ -469,7 +477,7 @@ int64_t RDMAContext::cq_poll_handle()
                     status_code = wc[i].status;
                 }
                 if (wc[i].wr_id != 0) {
-                    RDMAAssignment* assign = reinterpret_cast<RDMAAssignment*>(wc[i].wr_id);
+                    RDMAAssignmentPtr assign = reinterpret_cast<RDMAAssignmentPtr>(wc[i].wr_id);
                     switch (OpCode wr_type = assign->opcode_) {
                         case OpCode::READ:
                         case OpCode::SEND:
@@ -506,8 +514,8 @@ int64_t RDMAContext::wq_dispatch_handle()
         if (stop_wq_future_)
             return 0;
         while (!assign_queue_.empty()) {
-            RDMAAssignment* front_assign = assign_queue_.front();
-            size_t          batch_size   = front_assign->batch_.size();
+            RDMAAssignmentPtr front_assign = assign_queue_.front();
+            size_t            batch_size   = front_assign->batch_.size();
             if (batch_size > MAX_SEND_WR) {
                 SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SEND WR(" << MAX_SEND_WR
                                               << "), this request will be ignored");

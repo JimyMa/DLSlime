@@ -29,7 +29,7 @@ if __name__ == '__main__':
     endpoint = RDMAEndpoint(device_name=args.device_name)
     zmq_send.send_string(endpoint.local_endpoint_info)
     remote_endpoint_info = zmq_recv.recv_string()
-    endpoint.connect_to(remote_endpoint_info)
+    endpoint.connect(remote_endpoint_info)
 
     if args.mode == 'send':
         ones = torch.ones([16], dtype=torch.uint8)

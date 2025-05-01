@@ -4,8 +4,6 @@
 #include <map>
 #include <vector>
 
-#include <zmq.hpp>
-
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_transport.h"
@@ -48,18 +46,14 @@ public:
 
     int64_t register_memory_region(const std::string& mr_key, uintptr_t data_ptr, size_t length);
 
-    int connectRemoteNode(const std::string& remote_addr, int remote_port, int local_port);
+    int connect(const json& remote_info);
 
-    RDMASchedulerAssignment submitAssignment(AssignmentBatch& assignment);
+    RDMASchedulerAssignment submitAssignment(OpCode opcode, AssignmentBatch& assignment);
 
-    int teriminate();
-
-    int waitRemoteTeriminate();
+    json rdma_exchange_info();
 
 private:
     int selectRdma();
-
-    json rdma_exchange_info();
 
     void resetTcpSockets();
 
@@ -73,10 +67,6 @@ private:
     std::map<int, AssignmentBatch>                         rdma_index_to_assignments_;
     int                                                    assignment_cnt_      = 0;
     int                                                    last_rdma_selection_ = -1;
-
-    zmq::context_t* tcp_context_ = nullptr;
-    zmq::socket_t*  send_        = nullptr;
-    zmq::socket_t*  recv_        = nullptr;
 };
 
 };  // namespace slime

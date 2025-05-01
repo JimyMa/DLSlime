@@ -2,10 +2,20 @@
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_transport.h"
+#include <functional>
+#include <pybind11/cast.h>
+#include <pybind11/pytypes.h>
+
+#ifdef BUILD_NVLINK
+#include "engine/nvlink/memory_pool.h"
+#include "engine/nvlink/nvlink_transport.h"
+#endif
 
 #include "utils/json.hpp"
 #include "utils/logging.h"
 #include "utils/utils.h"
+
+#include "pybind_json/pybind_json.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -23,50 +33,42 @@ PYBIND11_MODULE(_slime_c, m)
         .value("READ", slime::OpCode::READ)
         .value("SEND", slime::OpCode::SEND)
         .value("RECV", slime::OpCode::RECV);
+
     py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
+
     py::class_<slime::RDMASchedulerAssignment, std::shared_ptr<slime::RDMASchedulerAssignment>>(
         m, "RDMASchedulerAssignment")
         .def("wait", &slime::RDMASchedulerAssignment::wait, py::call_guard<py::gil_scoped_release>());
+
     py::class_<slime::RDMAContext>(m, "rdma_context")
         .def(py::init<>())
         .def("init_rdma_context", &slime::RDMAContext::init)
         .def("register_memory_region", &slime::RDMAContext::register_memory_region)
-        .def("register_remote_memory_region",
-             [](slime::RDMAContext& self, std::string mr_info) {
-                 json json_info = json::parse(mr_info);
-                 for (auto& item : json_info["mr_info"].items())
-                     self.register_remote_memory_region(item.key(), item.value());
-             })
-        .def("local_info", [](slime::RDMAContext& self) { return self.local_info().dump(); })
-        .def("connect",
-             [](slime::RDMAContext& self, std::string remote_info) {
-                 json            json_info        = json::parse(remote_info);
-                 slime::RDMAInfo remote_rdma_info = slime::RDMAInfo(json_info["rdma_info"]);
-                 self.connect_to(remote_rdma_info);
-                 for (auto& mr_info : json_info["mr_info"].items())
-                     self.register_remote_memory_region(mr_info.key(), mr_info.value());
-             })
+        .def("register_remote_memory_region", &slime::RDMAContext::register_remote_memory_region)
+        .def("endpoint_info", &slime::RDMAContext::endpoint_info)
+        .def("connect", &slime::RDMAContext::connect)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future)
         .def(
             "submit",
-            [](slime::RDMAContext& self, slime::OpCode opcode, slime::AssignmentBatch& batch) {
-                slime::RDMAAssignment* rdma_assignment = new slime::RDMAAssignment(opcode, batch);
-                self.submit(rdma_assignment);
-                return std::make_shared<slime::RDMASchedulerAssignment>(slime::RDMAAssignmentPtrBatch{rdma_assignment});
-            },
-            py::call_guard<py::gil_scoped_release>())
-        .def(
-            "submit_with_callback",
-            [](slime::RDMAContext&      self,
-               slime::OpCode            opcode,
-               slime::AssignmentBatch&  batch,
-               std::function<void(int)> callback) {
-                slime::RDMAAssignment* rdma_assignment = new slime::RDMAAssignment(opcode, batch, callback);
-                self.submit(rdma_assignment);
+            [](slime::RDMAContext&     self,
+               slime::OpCode           opcode,
+               slime::AssignmentBatch& batch,
+               slime::callback_fn_t    callback) {
+                slime::RDMAAssignmentPtr rdma_assignment = self.submit(opcode, batch, callback);
                 return std::make_shared<slime::RDMASchedulerAssignment>(slime::RDMAAssignmentPtrBatch{rdma_assignment});
             },
             py::call_guard<py::gil_scoped_release>());
 
     m.def("available_nic", &slime::available_nic);
+
+#ifdef BUILD_NVLINK
+    py::class_<slime::NVLinkContext>(m, "nvlink_context")
+        .def(py::init<>())
+        .def("register_memory_region", &slime::NVLinkContext::register_memory_region)
+        .def("register_remote_memory_region", &slime::NVLinkContext::register_remote_memory_region)
+        .def("endpoint_info", &slime::NVLinkContext::endpoint_info)
+        .def("connect", &slime::NVLinkContext::connect)
+        .def("read_batch", &slime::NVLinkContext::read_batch);
+#endif
 }

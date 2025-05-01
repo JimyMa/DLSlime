@@ -4,7 +4,7 @@ import time
 
 import torch
 
-from dlslime.transport.engine import TransferEngine
+from dlslime.remote_io.engine import TransferEngine
 
 parser = argparse.ArgumentParser('sender')
 

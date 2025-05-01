@@ -41,7 +41,7 @@ int ibv_read_sysfs_file(const char* dir, const char* file, char* buf, size_t siz
  */
 #define V1_TYPE "IB/RoCE v1"
 #define V2_TYPE "RoCE v2"
-int ibv_query_gid_type(struct ibv_context* context, uint8_t port_num, unsigned int index, enum ibv_gid_type* type)
+int ibv_query_gid_type(struct ibv_context* context, uint8_t port_num, unsigned int index, ibv_gid_type_custom_t* type)
 {
     char name[32];
     char buff[11];
@@ -60,7 +60,7 @@ int ibv_query_gid_type(struct ibv_context* context, uint8_t port_num, unsigned i
             /* In IB, this file doesn't exist and the kernel sets
              * errno to -EINVAL.
              */
-            *type = IBV_GID_TYPE_ROCE_V1;
+            *type = ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V1;
             return 0;
         }
         if (asprintf(&dir_path, "%s/%s/%d/%s/", context->device->ibdev_path, "ports", port_num, "gid_attrs") < 0)
@@ -73,7 +73,7 @@ int ibv_query_gid_type(struct ibv_context* context, uint8_t port_num, unsigned i
                  * we have an old kernel and all GIDs are
                  * IB/RoCE v1
                  */
-                *type = IBV_GID_TYPE_ROCE_V1;
+                *type = ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V1;
             else
                 return -1;
         }
@@ -85,10 +85,10 @@ int ibv_query_gid_type(struct ibv_context* context, uint8_t port_num, unsigned i
     }
     else {
         if (!strcmp(buff, V1_TYPE)) {
-            *type = IBV_GID_TYPE_ROCE_V1;
+            *type = ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V1;
         }
         else if (!strcmp(buff, V2_TYPE)) {
-            *type = IBV_GID_TYPE_ROCE_V2;
+            *type = ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V2;
         }
         else {
             errno = ENOTSUP;
@@ -99,12 +99,12 @@ int ibv_query_gid_type(struct ibv_context* context, uint8_t port_num, unsigned i
     return 0;
 }
 
-int ibv_find_sgid_type(struct ibv_context* context, uint8_t port_num, enum ibv_gid_type gid_type, int gid_family)
+int ibv_find_sgid_type(struct ibv_context* context, uint8_t port_num, ibv_gid_type_custom_t gid_type, int gid_family)
 {
-    enum ibv_gid_type sgid_type;
-    union ibv_gid     sgid;
-    int               sgid_family = -1;
-    int               idx         = 0;
+    ibv_gid_type_custom_t sgid_type;
+    union ibv_gid         sgid;
+    int                   sgid_family = -1;
+    int                   idx         = 0;
 
     do {
         if (ibv_query_gid(context, port_num, idx, &sgid)) {

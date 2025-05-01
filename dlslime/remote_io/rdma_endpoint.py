@@ -4,8 +4,10 @@ from typing import Any, Callable, Dict, List, Tuple
 from dlslime import _slime_c
 from dlslime.assignment import Assignment
 
+from .base_endpoint import BaseEndpoint
 
-class RDMAEndpoint:
+
+class RDMAEndpoint(BaseEndpoint):
     """Manages RDMA endpoint lifecycle including resource allocation and data
     operations.
 
@@ -20,7 +22,7 @@ class RDMAEndpoint:
         self,
         device_name: str,
         ib_port: int = 1,
-        link_type: str = 'RoCE',
+        link_type: str = "RoCE",
     ):
         """Initialize an RDMA endpoint bound to specific hardware resources.
 
@@ -29,12 +31,20 @@ class RDMAEndpoint:
             ib_port: InfiniBand physical port number (1-based indexing)
             transport_type: Underlying transport ('RoCE' or 'InfiniBand')
         """
-        self._ctx = _slime_c.rdma_context()
-        self.initialize_endpoint(device_name, ib_port, link_type)
+        self._ctx: _slime_c.rdma_context = _slime_c.rdma_context()
+        self.initialize(device_name, ib_port, link_type)
         self.assignment_with_callback = {}
 
     @property
-    def local_endpoint_info(self) -> Dict[str, Any]:
+    def mr_info(self) -> Dict[str, Any]:
+        return self.endpoint_info["mr_info"]
+
+    @property
+    def rdma_info(self) -> Dict[str, Any]:
+        return self.endpoint_info["rdma_info"]
+
+    @property
+    def endpoint_info(self) -> Dict[str, Any]:
         """Retrieve local endpoint parameters for peer connection setup.
 
         Returns:
@@ -43,9 +53,9 @@ class RDMAEndpoint:
             - 'qp_num': Queue Pair number
             - 'lid': Local ID (InfiniBand only)
         """
-        return self._ctx.local_info()
+        return self._ctx.endpoint_info()
 
-    def initialize_endpoint(
+    def initialize(
         self,
         device_name: str,
         ib_port: int,
@@ -58,7 +68,7 @@ class RDMAEndpoint:
         """
         return self._ctx.init_rdma_context(device_name, ib_port, transport_type)
 
-    def connect_to(self, remote_endpoint_info: Dict[str, Any]) -> None:
+    def connect(self, remote_endpoint_info: Dict[str, Any]) -> None:
         """Establish RC (Reliable Connection) to a remote endpoint.
 
         Args:
@@ -67,16 +77,12 @@ class RDMAEndpoint:
         self._ctx.connect(remote_endpoint_info)
         self._ctx.launch_future()  # Start background CQ polling
 
-    def stop(self):
-        """Safely stops the endpoint by terminating all background activities
-        and releasing resources."""
-        self._ctx.stop_future()
-
     def register_memory_region(
         self,
-        mr_identifier: str,
-        virtual_address: int,
-        length_bytes: int,
+        mr_key: str,
+        addr: int,
+        offset: int,
+        length: int,
     ) -> None:
         """Register a Memory Region (MR) for RDMA operations.
 
@@ -85,7 +91,7 @@ class RDMAEndpoint:
             virtual_address: Starting VA of the memory block
             length_bytes: Size of the region in bytes
         """
-        self._ctx.register_memory_region(mr_identifier, virtual_address, length_bytes)
+        self._ctx.register_memory_region(mr_key, addr + offset, length)
 
     def register_remote_memory_region(self, remote_mr_info: str) -> None:
         """Register a Remote Memory Region (MR) for RDMA operations.
@@ -104,7 +110,11 @@ class RDMAEndpoint:
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.submit(_slime_c.Assignment(_slime_c.OpCode.SEND, mr_key, [], [offset], length, _completion_handler))
+        self._ctx.submit(
+            _slime_c.Assignment(
+                _slime_c.OpCode.SEND, mr_key, [], [offset], length, _completion_handler
+            )
+        )
 
         return await future
 
@@ -115,16 +125,24 @@ class RDMAEndpoint:
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.submit(_slime_c.Assignment(_slime_c.OpCode.RECV, mr_key, [], [offset], length, _completion_handler))
+        self._ctx.submit(
+            _slime_c.Assignment(
+                _slime_c.OpCode.RECV, mr_key, [], [offset], length, _completion_handler
+            )
+        )
 
         return await future
 
-    def read_batch_with_callback(self, batch: List[Assignment], callback: Callable[[int], None]):
+    def read_batch_with_callback(
+        self, batch: List[Assignment], callback: Callable[[int], None]
+    ):
         callback_obj_id = id(callback)
+
         def delete_assignment_callback(code: int):
             callback(code)
             del self.assignment_with_callback[callback_obj_id]
-        rdma_assignment = self._ctx.submit_with_callback(
+
+        rdma_assignment = self._ctx.submit(
             _slime_c.OpCode.READ,
             [
                 _slime_c.Assignment(
@@ -132,9 +150,11 @@ class RDMAEndpoint:
                     assign.target_offset,
                     assign.source_offset,
                     assign.length,
-                ) for assign in batch
+                )
+                for assign in batch
             ],
-            delete_assignment_callback)
+            delete_assignment_callback,
+        )
         self.assignment_with_callback[callback_obj_id] = rdma_assignment
         return rdma_assignment
 
@@ -154,15 +174,25 @@ class RDMAEndpoint:
         Returns:
             ibv_wc_status code (0 = IBV_WC_SUCCESS)
         """
-        rdma_assignment = self._ctx.submit(_slime_c.OpCode.READ, [
-            _slime_c.Assignment(
-                assign.mr_key,
-                assign.target_offset,
-                assign.source_offset,
-                assign.length,
-            ) for assign in batch
-        ])
+        rdma_assignment = self._ctx.submit(
+            _slime_c.OpCode.READ,
+            [
+                _slime_c.Assignment(
+                    assign.mr_key,
+                    assign.target_offset,
+                    assign.source_offset,
+                    assign.length,
+                )
+                for assign in batch
+            ],
+            None,
+        )
         if async_op:
             return rdma_assignment
         else:
             return rdma_assignment.wait()
+
+    def stop(self):
+        """Safely stops the endpoint by terminating all background activities
+        and releasing resources."""
+        self._ctx.stop_future()

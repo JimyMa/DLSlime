@@ -22,7 +22,7 @@ class RDMAEndpoint(BaseEndpoint):
         self,
         device_name: str,
         ib_port: int = 1,
-        link_type: str = "RoCE",
+        link_type: str = 'RoCE',
     ):
         """Initialize an RDMA endpoint bound to specific hardware resources.
 
@@ -37,11 +37,11 @@ class RDMAEndpoint(BaseEndpoint):
 
     @property
     def mr_info(self) -> Dict[str, Any]:
-        return self.endpoint_info["mr_info"]
+        return self.endpoint_info['mr_info']
 
     @property
     def rdma_info(self) -> Dict[str, Any]:
-        return self.endpoint_info["rdma_info"]
+        return self.endpoint_info['rdma_info']
 
     @property
     def endpoint_info(self) -> Dict[str, Any]:
@@ -110,11 +110,7 @@ class RDMAEndpoint(BaseEndpoint):
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.submit(
-            _slime_c.Assignment(
-                _slime_c.OpCode.SEND, mr_key, [], [offset], length, _completion_handler
-            )
-        )
+        self._ctx.submit(_slime_c.Assignment(_slime_c.OpCode.SEND, mr_key, [], [offset], length, _completion_handler))
 
         return await future
 
@@ -125,17 +121,11 @@ class RDMAEndpoint(BaseEndpoint):
         def _completion_handler(status: int):
             loop.call_soon_threadsafe(future.set_result, status)
 
-        self._ctx.submit(
-            _slime_c.Assignment(
-                _slime_c.OpCode.RECV, mr_key, [], [offset], length, _completion_handler
-            )
-        )
+        self._ctx.submit(_slime_c.Assignment(_slime_c.OpCode.RECV, mr_key, [], [offset], length, _completion_handler))
 
         return await future
 
-    def read_batch_with_callback(
-        self, batch: List[Assignment], callback: Callable[[int], None]
-    ):
+    def read_batch_with_callback(self, batch: List[Assignment], callback: Callable[[int], None]):
         callback_obj_id = id(callback)
 
         def delete_assignment_callback(code: int):
@@ -150,8 +140,7 @@ class RDMAEndpoint(BaseEndpoint):
                     assign.target_offset,
                     assign.source_offset,
                     assign.length,
-                )
-                for assign in batch
+                ) for assign in batch
             ],
             delete_assignment_callback,
         )
@@ -182,8 +171,7 @@ class RDMAEndpoint(BaseEndpoint):
                     assign.target_offset,
                     assign.source_offset,
                     assign.length,
-                )
-                for assign in batch
+                ) for assign in batch
             ],
             None,
         )

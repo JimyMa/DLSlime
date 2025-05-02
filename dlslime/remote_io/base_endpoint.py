@@ -2,6 +2,7 @@ import abc
 
 
 class BaseEndpoint:
+
     def __init__(self, *args, **kwargs):
         raise NotImplementedError
 
@@ -32,4 +33,3 @@ class BaseEndpoint:
     @abc.abstractmethod
     def read_batch(self):
         raise NotImplementedError
-

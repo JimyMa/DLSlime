@@ -15,7 +15,7 @@ target_link_libraries(_slime_c PRIVATE _slime_rdma)
 endif()
 
 set_target_properties(
-    _slime_c 
+    _slime_c
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "\${ORIGIN}"

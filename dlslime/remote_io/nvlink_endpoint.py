@@ -7,13 +7,14 @@ from .base_endpoint import BaseEndpoint
 
 
 class NVLinkEndpoint(BaseEndpoint):
+
     def __init__(self):
         self._ctx: _slime_c.nvlink_context = _slime_c.nvlink_context()
         self.initialize()
 
     @property
     def mr_info(self):
-        return self.endpoint_info["mr_info"]
+        return self.endpoint_info['mr_info']
 
     @property
     def endpoint_info(self):
@@ -22,14 +23,10 @@ class NVLinkEndpoint(BaseEndpoint):
     def initialize(self):
         pass
 
-    def register_memory_region(
-        self, mr_key: str, addr: int, offset: int, length: int
-    ) -> int:
+    def register_memory_region(self, mr_key: str, addr: int, offset: int, length: int) -> int:
         return self._ctx.register_memory_region(mr_key, addr, offset, length)
 
-    def register_remote_memory_region(
-        self, mr_key: str, remote_mr_info: Dict[str, Any]
-    ) -> int:
+    def register_remote_memory_region(self, mr_key: str, remote_mr_info: Dict[str, Any]) -> int:
         return self._ctx.register_memory_region(mr_key, remote_mr_info)
 
     def connect(self, endpoint_info: Dict[str, Any]) -> int:
@@ -43,8 +40,7 @@ class NVLinkEndpoint(BaseEndpoint):
                     assign.target_offset,
                     assign.source_offset,
                     assign.length,
-                )
-                for assign in batch
+                ) for assign in batch
             ],
             cuda_stream,
         )

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List
 
 from dlslime import _slime_c
 from dlslime.assignment import Assignment

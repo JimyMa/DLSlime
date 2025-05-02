@@ -3,8 +3,10 @@ from typing import Any, Dict, List
 from dlslime import _slime_c
 from dlslime.assignment import Assignment
 
+from .base_endpoint import BaseEndpoint
 
-class NVLinkEndpoint:
+
+class NVLinkEndpoint(BaseEndpoint):
     def __init__(self):
         self._ctx: _slime_c.nvlink_context = _slime_c.nvlink_context()
         self.initialize()
@@ -20,10 +22,14 @@ class NVLinkEndpoint:
     def initialize(self):
         pass
 
-    def register_memory_region(self, mr_key: str, addr: int, offset: int, length: int) -> int:
+    def register_memory_region(
+        self, mr_key: str, addr: int, offset: int, length: int
+    ) -> int:
         return self._ctx.register_memory_region(mr_key, addr, offset, length)
 
-    def register_remote_memory_region(self, mr_key: str, remote_mr_info: Dict[str, Any]) -> int:
+    def register_remote_memory_region(
+        self, mr_key: str, remote_mr_info: Dict[str, Any]
+    ) -> int:
         return self._ctx.register_memory_region(mr_key, remote_mr_info)
 
     def connect(self, endpoint_info: Dict[str, Any]) -> int:
@@ -36,9 +42,9 @@ class NVLinkEndpoint:
                     assign.mr_key,
                     assign.target_offset,
                     assign.source_offset,
-                    assign.length
+                    assign.length,
                 )
                 for assign in batch
-            ] 
-            , cuda_stream
+            ],
+            cuda_stream,
         )

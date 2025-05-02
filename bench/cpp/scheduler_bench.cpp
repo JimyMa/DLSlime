@@ -20,7 +20,7 @@
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_scheduler.h"
-#include "engine/rdma/rdma_transport.h"
+#include "engine/rdma/rdma_context.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
 

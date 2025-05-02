@@ -3,7 +3,7 @@ add_library(
     SHARED
     memory_pool.cpp
     rdma_assignment.cpp
-    rdma_transport.cpp
+    rdma_context.cpp
     rdma_scheduler.cpp
 )
 

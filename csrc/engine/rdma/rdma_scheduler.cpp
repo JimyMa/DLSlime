@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <cstddef>
 #include <random>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
+#include "utils/logging.h"
 #include "utils/utils.h"
 
 namespace slime {
@@ -15,12 +18,26 @@ const int64_t RDMAScheduler::SPLIT_ASSIGNMENT_BYTES;
 const int64_t RDMAScheduler::SPLIT_ASSIGNMENT_BATCH_SIZE;
 const int     RDMAScheduler::PORT_EACH_DEVICE;
 
-RDMAScheduler::RDMAScheduler()
+RDMAScheduler::RDMAScheduler(const std::vector<std::string>& dev_names_args)
 {
-    std::vector<std::string> dev_names = available_nic();
-    size_t                   count     = dev_names.size() * PORT_EACH_DEVICE;
-    rdma_ctxs_                         = std::vector<RDMAContext>(count);
-    int index                          = 0;
+    // Get all available RDMA devices
+    SLIME_LOG_INFO("Initialize an RDMA Scheduler.");
+
+    std::vector<std::string> dev_names;
+    if (dev_names_args.empty()) {
+        dev_names = available_nic();
+    }
+    else {
+        dev_names = dev_names_args;
+    }
+
+    for (const std::string& dev_name : dev_names) {
+        SLIME_LOG_INFO("device name: ", dev_name);
+    }
+
+    size_t count = dev_names.size() * PORT_EACH_DEVICE;
+    rdma_ctxs_   = std::vector<RDMAContext>(count);
+    int index    = 0;
     for (const std::string& name : dev_names) {
         for (int ib = 1; ib <= PORT_EACH_DEVICE; ++ib) {
             rdma_ctxs_[index].init(name, ib, "RoCE");
@@ -40,22 +57,11 @@ RDMAScheduler::~RDMAScheduler()
 
 int64_t RDMAScheduler::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
 {
-    int64_t                          rem_len = length;
-    uintptr_t                        cur_ptr = data_ptr;
-    std::map<uintptr_t, DevMrSlice>& slices  = virtual_mr_to_actual_mr_[mr_key];
-    int                              count   = 0;
-    while (rem_len > 0) {
-        int64_t      regist_len        = std::min(rem_len, SPLIT_ASSIGNMENT_BYTES);
-        int          select_rdma_index = selectRdma();
-        RDMAContext& rdma_ctx          = rdma_ctxs_[select_rdma_index];
-        std::string  act_mr_key        = mr_key + rdma_ctx.get_dev_ib() + ",cnt=" + std::to_string(count);
-        rdma_ctx.register_memory_region(act_mr_key, cur_ptr, regist_len);
-        slices.insert({cur_ptr, DevMrSlice(select_rdma_index, act_mr_key, data_ptr, cur_ptr, regist_len)});
-        rem_len -= regist_len;
-        cur_ptr += regist_len;
-        ++count;
+    // Register the memory region in each RDMA context
+    for (RDMAContext& rdma_ctx : rdma_ctxs_) {
+        rdma_ctx.register_memory_region(mr_key, data_ptr, length);
     }
-    return slices.size();
+    return 0;
 }
 
 int RDMAScheduler::connect(const json& remote_info)
@@ -69,69 +75,23 @@ int RDMAScheduler::connect(const json& remote_info)
     return 0;
 }
 
-RDMASchedulerAssignment RDMAScheduler::submitAssignment(OpCode opcode, AssignmentBatch& batch)
+RDMASchedulerAssignmentSharedPtr RDMAScheduler::submitAssignment(OpCode opcode, AssignmentBatch& batch)
 {
     size_t batch_size = batch.size();
     rdma_index_to_assignments_.clear();
+    size_t total_ctxs = rdma_ctxs_.size();
+
     for (int i = 0; i < batch_size; ++i) {
-        // Get assignment actual rdma_context
-        Assignment& assignment = batch[i];
-        SLIME_ASSERT(virtual_mr_to_actual_mr_.count(assignment.mr_key), "submitAssignment with non-exist MR Key");
-        const std::map<uintptr_t, DevMrSlice>& slices          = virtual_mr_to_actual_mr_[assignment.mr_key];
-        uintptr_t                              origin_data_ptr = slices.begin()->first;
-        uintptr_t                              offset_data_ptr = assignment.source_offset + origin_data_ptr;
-        auto                                   gt_offset_iter  = slices.upper_bound(offset_data_ptr);
-        auto                                   le_offset_iter  = --gt_offset_iter;
-        ++gt_offset_iter;
-        uintptr_t actual_data_ptr = le_offset_iter->first;
-        uintptr_t next_data_ptr   = gt_offset_iter->first;
-
-        const DevMrSlice& slice                = le_offset_iter->second;
-        uint64_t          actual_source_offset = assignment.source_offset + origin_data_ptr - actual_data_ptr;
-        uint64_t          actual_target_offset = assignment.target_offset + origin_data_ptr - actual_data_ptr;
-
-        if (actual_source_offset + assignment.length <= SPLIT_ASSIGNMENT_BYTES) {
-            // Within a ACTUAL SPLIT SLICE
-            int rdma_index = slice.rdma_ctx_index;
-            rdma_index_to_assignments_[rdma_index].push_back(
-                Assignment(slice.mr_key, actual_target_offset, actual_source_offset, assignment.length));
-        }
-        else {
-            // Over a ACTUAL SPLIT SLICE, we have to split it to several RDMA
-            int rdma_index = slice.rdma_ctx_index;
-            rdma_index_to_assignments_[rdma_index].push_back(Assignment(slice.mr_key,
-                                                                        actual_target_offset,
-                                                                        actual_source_offset,
-                                                                        SPLIT_ASSIGNMENT_BYTES - actual_source_offset));
-            const DevMrSlice* next_slice = &(gt_offset_iter->second);
-
-            int64_t rem_len      = actual_source_offset + assignment.length - SPLIT_ASSIGNMENT_BYTES;
-            actual_target_offset = 0;
-            actual_source_offset = 0;
-            while (rem_len > 0) {
-                int64_t assign_len = std::min(rem_len, SPLIT_ASSIGNMENT_BYTES);
-                int     rdma_index = next_slice->rdma_ctx_index;
-                rdma_index_to_assignments_[rdma_index].push_back(
-                    Assignment(next_slice->mr_key, actual_target_offset, actual_source_offset, assign_len));
-                rem_len -= assign_len;
-                ++gt_offset_iter;
-                next_slice = &(gt_offset_iter->second);
-            }
-        }
+        rdma_index_to_assignments_[selectRdma()].push_back(batch[i]);
     }
 
-    // Combine assignments
-    assignment_cnt_ = 0;
-    // Set new callback and submit assignment to rdma context
-    split_assignment_done_cnt_.store(0, std::memory_order_relaxed);
-    RDMAAssignmentPtrBatch rdma_assignment_batch;
-    for (auto& p : rdma_index_to_assignments_) {
-        AssignmentBatch&  assignments     = p.second;
-        RDMAContext&      rdma_ctx        = rdma_ctxs_[p.first];
-        RDMAAssignmentPtr rdma_assignment = rdma_ctx.submit(opcode, assignments);
+    RDMAAssignmentSharedPtrBatch rdma_assignment_batch;
+    for (int i = 0; i < rdma_ctxs_.size(); i++) {
+        RDMAAssignmentSharedPtr rdma_assignment = rdma_ctxs_[i].submit(opcode, rdma_index_to_assignments_[i]);
         rdma_assignment_batch.push_back(rdma_assignment);
     }
-    return RDMASchedulerAssignment(rdma_assignment_batch);
+
+    return std::make_shared<RDMASchedulerAssignment>(rdma_assignment_batch);
 }
 
 int RDMAScheduler::selectRdma()
@@ -141,7 +101,7 @@ int RDMAScheduler::selectRdma()
     return last_rdma_selection_;
 }
 
-json RDMAScheduler::rdma_exchange_info()
+json RDMAScheduler::scheduler_info()
 {
     json json_info = json();
     for (int i = 0; i < rdma_ctxs_.size(); ++i) {

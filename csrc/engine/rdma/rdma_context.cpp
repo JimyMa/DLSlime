@@ -8,7 +8,9 @@
 #include "utils/logging.h"
 #include "utils/utils.h"
 
+#include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
@@ -22,17 +24,6 @@
 #include <stdexcept>
 
 namespace slime {
-
-typedef struct callback_info {
-    callback_info(OpCode opcode, size_t batchsize, callback_fn_t& callback):
-        opcode_(opcode), batchsize_(batchsize), callback_(callback)
-    {
-    }
-    OpCode        opcode_;
-    size_t        batchsize_;
-    callback_fn_t callback_;
-} callback_info_t;
-
 int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string link_type)
 {
     device_name_ = dev_name;
@@ -307,16 +298,16 @@ void RDMAContext::stop_future()
     }
 }
 
-RDMAAssignmentPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
+RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
     std::unique_lock<std::mutex> lock(assign_queue_mutex_);
-    slime::RDMAAssignmentPtr     rdma_assignment = new slime::RDMAAssignment(opcode, batch, callback);
+    RDMAAssignmentSharedPtr      rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch, callback);
     assign_queue_.push(rdma_assignment);
     has_runnable_event_.notify_one();
     return rdma_assignment;
 }
 
-int64_t RDMAContext::post_send(RDMAAssignmentPtr assign)
+int64_t RDMAContext::post_send(RDMAAssignmentSharedPtr assign)
 {
     int ret;
 
@@ -351,7 +342,7 @@ int64_t RDMAContext::post_send(RDMAAssignmentPtr assign)
     return 0;
 }
 
-int64_t RDMAContext::post_recv(RDMAAssignmentPtr assign)
+int64_t RDMAContext::post_recv(RDMAAssignmentSharedPtr assign)
 {
     int ret;
 
@@ -384,9 +375,9 @@ int64_t RDMAContext::post_recv(RDMAAssignmentPtr assign)
     return 0;
 }
 
-int64_t RDMAContext::post_read_batch(RDMAAssignmentPtr assign)
+int64_t RDMAContext::post_read_batch(RDMAAssignmentSharedPtr assign)
 {
-    size_t              batch_size = assign->batch_.size();
+    size_t              batch_size = assign->batch_size();
     struct ibv_send_wr* bad_wr     = NULL;
     struct ibv_send_wr* wr         = new ibv_send_wr[batch_size];
     struct ibv_sge*     sge        = new ibv_sge[batch_size];
@@ -402,7 +393,7 @@ int64_t RDMAContext::post_read_batch(RDMAAssignmentPtr assign)
         sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
 
-        wr[i].wr_id               = (i == batch_size - 1) ? (uintptr_t)(assign) : 0;
+        wr[i].wr_id               = (i == batch_size - 1) ? (uintptr_t)(assign->callback_info_) : 0;
         wr[i].opcode              = IBV_WR_RDMA_READ;
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
@@ -411,8 +402,6 @@ int64_t RDMAContext::post_read_batch(RDMAAssignmentPtr assign)
         wr[i].wr.rdma.rkey        = remote_rkey;
         wr[i].next                = (i == batch_size - 1) ? NULL : &wr[i + 1];
     }
-
-    outstanding_rdma_reads_ += batch_size;
 
     int ret = 0;
     {
@@ -477,7 +466,7 @@ int64_t RDMAContext::cq_poll_handle()
                     status_code = wc[i].status;
                 }
                 if (wc[i].wr_id != 0) {
-                    RDMAAssignmentPtr assign = reinterpret_cast<RDMAAssignmentPtr>(wc[i].wr_id);
+                    callback_info_t* assign = reinterpret_cast<callback_info_t*>(wc[i].wr_id);
                     switch (OpCode wr_type = assign->opcode_) {
                         case OpCode::READ:
                         case OpCode::SEND:
@@ -487,8 +476,8 @@ int64_t RDMAContext::cq_poll_handle()
                         default:
                             SLIME_ABORT("Unimplemented WrType " << int64_t(wr_type));
                     }
-                    size_t batch_size = assign->batch_.size();
-                    outstanding_rdma_reads_ -= batch_size;
+                    size_t batch_size = assign->batch_size_;
+                    outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
                 }
             }
         }
@@ -514,32 +503,36 @@ int64_t RDMAContext::wq_dispatch_handle()
         if (stop_wq_future_)
             return 0;
         while (!assign_queue_.empty()) {
-            RDMAAssignmentPtr front_assign = assign_queue_.front();
-            size_t            batch_size   = front_assign->batch_.size();
+            RDMAAssignmentSharedPtr front_assign = assign_queue_.front();
+            size_t                  batch_size   = front_assign->batch_size();
             if (batch_size > MAX_SEND_WR) {
                 SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SEND WR(" << MAX_SEND_WR
                                               << "), this request will be ignored");
-                front_assign->callback_(0);
+                front_assign->callback_info_->callback_(500);
                 assign_queue_.pop();
             }
             else if (batch_size + outstanding_rdma_reads_ < MAX_SEND_WR) {
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
+                        outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
                         post_send(front_assign);
                         break;
                     case OpCode::RECV:
+                        outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
                         post_recv(front_assign);
                         break;
                     case OpCode::READ:
+                        outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
                         post_read_batch(front_assign);
                         break;
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");
+                        front_assign->callback_info_->callback_(500);
                 }
                 assign_queue_.pop();
             }
             else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                std::this_thread::sleep_for(std::chrono::nanoseconds(500000));
                 SLIME_LOG_WARN("Assignment Queue is full.");
             }
         }

@@ -2,6 +2,7 @@
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
+#include "engine/rdma/rdma_scheduler.h"
 #include <functional>
 #include <pybind11/cast.h>
 #include <pybind11/pytypes.h>
@@ -36,9 +37,18 @@ PYBIND11_MODULE(_slime_c, m)
 
     py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
 
-    py::class_<slime::RDMASchedulerAssignment, std::shared_ptr<slime::RDMASchedulerAssignment>>(
-        m, "RDMASchedulerAssignment")
+    py::class_<slime::RDMAAssignment, slime::RDMAAssignmentSharedPtr>(m, "RDMAAssignment")
+        .def("wait", &slime::RDMAAssignment::wait, py::call_guard<py::gil_scoped_release>());
+
+    py::class_<slime::RDMASchedulerAssignment, slime::RDMASchedulerAssignmentSharedPtr>(m, "RDMASchedulerAssignment")
         .def("wait", &slime::RDMASchedulerAssignment::wait, py::call_guard<py::gil_scoped_release>());
+
+    py::class_<slime::RDMAScheduler>(m, "RDMAScheduler")
+        .def(py::init<const std::vector<std::string>&>())
+        .def("register_memory_region", &slime::RDMAScheduler::register_memory_region)
+        .def("connect", &slime::RDMAScheduler::connect)
+        .def("submit_assignment", &slime::RDMAScheduler::submitAssignment)
+        .def("scheduler_info", &slime::RDMAScheduler::scheduler_info);
 
     py::class_<slime::RDMAContext>(m, "rdma_context")
         .def(py::init<>())
@@ -49,16 +59,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("connect", &slime::RDMAContext::connect)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future)
-        .def(
-            "submit",
-            [](slime::RDMAContext&     self,
-               slime::OpCode           opcode,
-               slime::AssignmentBatch& batch,
-               slime::callback_fn_t    callback) {
-                slime::RDMAAssignmentPtr rdma_assignment = self.submit(opcode, batch, callback);
-                return std::make_shared<slime::RDMASchedulerAssignment>(slime::RDMAAssignmentPtrBatch{rdma_assignment});
-            },
-            py::call_guard<py::gil_scoped_release>());
+        .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>());
 
     m.def("available_nic", &slime::available_nic);
 

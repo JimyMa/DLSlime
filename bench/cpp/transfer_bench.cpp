@@ -35,11 +35,13 @@ DEFINE_string(link_type, "RoCE", "IB or RoCE");
 DEFINE_string(initiator_endpoint, "", "initiator endpoint");
 DEFINE_string(target_endpoint, "", "target endpoint");
 
-DEFINE_uint64(buffer_size, (1ull << 30) + 1, "total size of data buffer");
+DEFINE_uint64(buffer_size, (10ull << 30) + 1, "total size of data buffer");
 DEFINE_uint64(block_size, 2048000, "block size");
 DEFINE_uint64(batch_size, 160, "batch size");
 
 DEFINE_uint64(duration, 10, "duration (s)");
+
+DEFINE_uint64(concurrent_num, 20, "batch size");
 
 json mr_info;
 
@@ -86,11 +88,7 @@ int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
     std::string remote_msg_str(static_cast<const char*>(remote_msg.data()), remote_msg.size());
 
     json remote_info = json::parse(remote_msg_str);
-    rdma_context.connect(remote_info["rdma_info"]);
-    for (auto& item : remote_info["mr_info"].items()) {
-        rdma_context.register_remote_memory_region(item.key(), item.value());
-    }
-
+    rdma_context.connect(remote_info);
     return 0;
 }
 
@@ -151,15 +149,22 @@ int initiator(RDMAContext& rdma_context)
             target_offsets.emplace_back(i * FLAGS_block_size);
         }
 
-        int             done = false;
-        AssignmentBatch batch;
-        for (int i = 0; i < FLAGS_batch_size; ++i) {
-            batch.push_back(Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size));
+        int done = false;
+
+        std::vector<RDMAAssignmentSharedPtr> rdma_assignment_batch;
+        for (int i = 0; i < FLAGS_concurrent_num; i++) {
+            AssignmentBatch batch;
+            for (int i = 0; i < FLAGS_batch_size; ++i) {
+                batch.push_back(Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size));
+            }
+            RDMAAssignmentSharedPtr rdma_assignment = rdma_context.submit(OpCode::READ, batch);
+            rdma_assignment_batch.emplace_back(rdma_assignment);
+            total_bytes += FLAGS_batch_size * FLAGS_block_size;
+            total_trips += 1;
         }
-        RDMAAssignmentPtr rdma_assignment = rdma_context.submit(OpCode::READ, batch);
-        RDMASchedulerAssignment({rdma_assignment}).wait();
-        total_bytes += FLAGS_batch_size * FLAGS_block_size;
-        total_trips += 1;
+        for (RDMAAssignmentSharedPtr& rdma_assignment : rdma_assignment_batch) {
+            rdma_assignment->wait();
+        }
     }
 
     auto   end_time   = std::chrono::steady_clock::now();

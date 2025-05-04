@@ -21,5 +21,5 @@ target_include_directories(scheduler_bench PUBLIC ${ZeroMQ_INCLUDE_DIRS})
 target_link_libraries(
     scheduler_bench
     PUBLIC
-    _slime_engine _slime_rdma gflags zmq
+    _slime_engine _slime_rdma gflags zmq numa
 )

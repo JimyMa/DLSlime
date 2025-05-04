@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -20,52 +21,84 @@ class RDMAScheduler;
 class RDMAAssignment;
 class RDMASchedulerAssignment;
 
-using callback_fn_t          = std::function<void(int)>;
-using RDMAAssignmentPtr      = RDMAAssignment*;
-using RDMAAssignmentPtrBatch = std::vector<RDMAAssignmentPtr>;
+using callback_fn_t                = std::function<void(int)>;
+using RDMAAssignmentSharedPtr      = std::shared_ptr<RDMAAssignment>;
+using RDMAAssignmentSharedPtrBatch = std::vector<RDMAAssignmentSharedPtr>;
 
 // TODO (Jimy): add timeout check
 const std::chrono::milliseconds kNoTimeout = std::chrono::milliseconds::zero();
 
-class RDMAAssignment {
-    friend class RDMAContext;
-
-public:
-    RDMAAssignment(OpCode opcode, AssignmentBatch& batch): opcode_(opcode), batch_(std::move(batch)) {}
-    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback): RDMAAssignment(opcode, batch)
+typedef struct callback_info {
+    callback_info() = default;
+    callback_info(OpCode opcode, size_t batch_size, callback_fn_t callback): opcode_(opcode), batch_size_(batch_size)
     {
         if (callback)
             callback_ = std::move(callback);
     }
 
-    inline size_t batch_size();
+    callback_fn_t callback_{[this](int code) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        finished_.fetch_add(1, std::memory_order_relaxed);
+        done_cv_.notify_one();
+    }};
 
-    void query();
+    OpCode opcode_;
+
+    size_t batch_size_;
+
+    std::atomic<int>        finished_{0};
+    std::condition_variable done_cv_;
+    std::mutex              mutex_;
+
+    void wait()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        done_cv_.wait(lock, [this]() { return finished_ > 0; });
+        return;
+    }
+
+    bool query()
+    {
+        return finished_.load() > 0;
+    }
+} callback_info_t;
+
+class RDMAAssignment {
+    friend class RDMAContext;
+
+public:
+    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
+
+    ~RDMAAssignment()
+    {
+        delete[] batch_;
+        delete callback_info_;
+    }
+
+    inline size_t batch_size()
+    {
+        return batch_size_;
+    };
+
     void wait();
+    bool query();
 
     std::string dump();
     void        print();
 
 private:
-    OpCode          opcode_;
-    AssignmentBatch batch_;
-    callback_fn_t   callback_{[this](int code) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        finished_ = true;
-        done_cv_.notify_one();
-    }};
+    OpCode      opcode_;
+    Assignment* batch_{nullptr};
+    size_t      batch_size_;
 
-    std::condition_variable done_cv_;
-    std::mutex              mutex_;
-
-    bool finished_{false};
+    callback_info_t* callback_info_;
 };
 
 class RDMASchedulerAssignment {
     friend class RDMAScheduler;
 
 public:
-    RDMASchedulerAssignment(RDMAAssignmentPtrBatch rdma_assignment_batch):
+    RDMASchedulerAssignment(RDMAAssignmentSharedPtrBatch rdma_assignment_batch):
         rdma_assignment_batch_(std::move(rdma_assignment_batch))
     {
     }
@@ -78,7 +111,7 @@ public:
     void        print();
 
 private:
-    RDMAAssignmentPtrBatch rdma_assignment_batch_{};
+    RDMAAssignmentSharedPtrBatch rdma_assignment_batch_{};
 };
 
 }  // namespace slime

@@ -56,7 +56,7 @@ public:
     int64_t connect(const json& endpoint_info_json);
 
     /* Submit an assignment */
-    RDMAAssignmentPtr submit(OpCode opcode, AssignmentBatch& assignment, callback_fn_t callback = nullptr);
+    RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& assignment, callback_fn_t callback = nullptr);
 
     void launch_future();
     void stop_future();
@@ -79,6 +79,12 @@ public:
     std::string get_dev_ib() const
     {
         return "@" + device_name_ + "#" + std::to_string(ib_port_);
+    }
+
+    bool validate_assignment()
+    {
+        // TODO: validate if the assignment is valid
+        return true;
     }
 
 private:
@@ -106,9 +112,9 @@ private:
     std::mutex rdma_post_send_mutex_;
 
     /* Assignment Queue */
-    std::mutex                    assign_queue_mutex_;
-    std::queue<RDMAAssignmentPtr> assign_queue_;
-    std::atomic<int>              outstanding_rdma_reads_{0};
+    std::mutex                          assign_queue_mutex_;
+    std::queue<RDMAAssignmentSharedPtr> assign_queue_;
+    std::atomic<int>                    outstanding_rdma_reads_{0};
 
     /* Has Runnable Assignment */
     std::condition_variable has_runnable_event_;
@@ -125,11 +131,11 @@ private:
     int64_t wq_dispatch_handle();
 
     /* Async RDMA SendRecv */
-    int64_t post_send(RDMAAssignmentPtr assign);
-    int64_t post_recv(RDMAAssignmentPtr assign);
+    int64_t post_send(RDMAAssignmentSharedPtr assign);
+    int64_t post_recv(RDMAAssignmentSharedPtr assign);
 
     /* Async RDMA Read */
-    int64_t post_read_batch(RDMAAssignmentPtr assign);
+    int64_t post_read_batch(RDMAAssignmentSharedPtr assign);
 };
 
 }  // namespace slime

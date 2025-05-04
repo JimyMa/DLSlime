@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <map>
 #include <vector>
 
@@ -9,6 +10,9 @@
 #include "engine/rdma/rdma_context.h"
 
 namespace slime {
+
+using RDMASchedulerAssignmentSharedPtr      = std::shared_ptr<RDMASchedulerAssignment>;
+using RDMASchedulerAssignmentSharedPtrBatch = std::vector<RDMASchedulerAssignmentSharedPtr>;
 
 /**
  * To aggregate send among different NIC devices,
@@ -41,16 +45,17 @@ struct DevMrSlice {
 
 class RDMAScheduler {
 public:
-    RDMAScheduler();
+    RDMAScheduler(const std::vector<std::string>& rdma_devices);
+    RDMAScheduler(): RDMAScheduler(std::vector<std::string>{}) {}
     ~RDMAScheduler();
 
     int64_t register_memory_region(const std::string& mr_key, uintptr_t data_ptr, size_t length);
 
     int connect(const json& remote_info);
 
-    RDMASchedulerAssignment submitAssignment(OpCode opcode, AssignmentBatch& assignment);
+    RDMASchedulerAssignmentSharedPtr submitAssignment(OpCode opcode, AssignmentBatch& assignment);
 
-    json rdma_exchange_info();
+    json scheduler_info();
 
 private:
     int selectRdma();

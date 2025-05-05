@@ -41,7 +41,7 @@ DEFINE_uint64(batch_size, 160, "batch size");
 
 DEFINE_uint64(duration, 10, "duration (s)");
 
-DEFINE_uint64(concurrent_num, 20, "batch size");
+DEFINE_uint64(concurrent_num, 20, "max concurrent rdma assignment");
 
 json mr_info;
 

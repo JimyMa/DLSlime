@@ -18,7 +18,7 @@ enum class OpCode : uint8_t {
     RECV
 };
 
-struct Assignment {
+typedef struct Assignment {
     Assignment() = default;
     Assignment(std::string mr_key, uint64_t target_offset, uint64_t source_offset, uint64_t length):
         mr_key(mr_key), target_offset(target_offset), source_offset(source_offset), length(length)
@@ -35,6 +35,6 @@ struct Assignment {
     uint64_t    source_offset{};
     uint64_t    target_offset{};
     uint64_t    length{};
-};
+} assignment_t;
 
 }  // namespace slime

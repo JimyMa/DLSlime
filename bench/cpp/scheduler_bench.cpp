@@ -2,6 +2,7 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <future>
 #include <mutex>
@@ -36,12 +37,13 @@ DEFINE_string(mode, "", "initiator or target");
 DEFINE_string(device_name, "", "device name");
 DEFINE_uint32(ib_port, 1, "device name");
 DEFINE_string(link_type, "RoCE", "IB or RoCE");
+DEFINE_uint32(num_thread, 2, "total qp num per rdma context");
 
 DEFINE_string(target_endpoint, "10.130.8.139:8000", "target endpoint");
 DEFINE_string(initiator_endpoint, "10.130.8.138:8001", "initiator endpoint");
 
 DEFINE_uint64(buffer_size, (2048000 * 160) + 1, "total size of data buffer");
-DEFINE_uint64(block_size, 2048000, "block size");
+DEFINE_uint64(block_size, 204800, "block size");
 DEFINE_uint64(batch_size, 160, "batch size");
 
 DEFINE_uint64(concurrent_num, 20, "max concurrent rdma scheduler assignment");
@@ -109,7 +111,7 @@ int teriminate()
     return 0;
 }
 
-void init_socket(std::string remote_endpoint, std::string local_endpoint)
+void init_tcp(std::string remote_endpoint, std::string local_endpoint)
 {
     tcp_context_ = new zmq::context_t(2);
     send_        = new zmq::socket_t(*tcp_context_, ZMQ_PUSH);
@@ -154,7 +156,8 @@ bool checkInitiatorCopied(void* data)
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < (FLAGS_batch_size * FLAGS_block_size); ++i) {
         if (byte_data[i] != i % 128) {
-            SLIME_ASSERT(false, "Transferred data at i = " << i << " not same.");
+            SLIME_ASSERT(false,
+                         "Transferred data at i = " << i << " not same. " << (int)byte_data[i] << " vs " << i % 8);
             return false;
         }
     }
@@ -163,16 +166,8 @@ bool checkInitiatorCopied(void* data)
 
 int target()
 {
-    size_t nsockets = 1;
-    if (FLAGS_numa_affinity) {
-        nsockets = NR_SOCKETS;
-    }
-    std::vector<void*> data(nsockets, nullptr);
-    for (int socket_id = 0; socket_id < nsockets; ++socket_id) {
-        data[socket_id] = memory_allocate_target(socket_id);
-    }
 
-    init_socket(FLAGS_initiator_endpoint, FLAGS_target_endpoint);
+    init_tcp(FLAGS_initiator_endpoint, FLAGS_target_endpoint);
 
     std::vector<std::string> nic_devices;
     if (FLAGS_device_name.empty())
@@ -181,48 +176,52 @@ int target()
         nic_devices = split_device_name(',');
 
     size_t ndevices = nic_devices.size();
-    size_t nsplit   = ndevices / nsockets;
+    size_t nsockets = FLAGS_numa_affinity ? NR_SOCKETS : 1;
+    nsockets        = ndevices > nsockets ? nsockets : ndevices;
 
-    int            nschedulers = ndevices > nsockets ? nsockets : ndevices;
+    size_t nsplit = ndevices / nsockets;
+
+    std::vector<void*> data(nsockets, nullptr);
+    for (int socket_id = 0; socket_id < nsockets; ++socket_id) {
+        data[socket_id] = memory_allocate_target(socket_id);
+    }
+    size_t         nschedulers = nsockets * FLAGS_num_thread;
     RDMAScheduler* rdma_schs[nschedulers];
 
     int sch_device_begin_id = 0;
-    for (int socket_id = 0; socket_id < nschedulers; ++socket_id) {
+
+    for (int socket_id = 0; socket_id < nsockets; ++socket_id) {
         std::vector<std::string> sch_devices =
             std::vector<std::string>(nic_devices.begin() + sch_device_begin_id,
                                      nic_devices.begin() + std::min(sch_device_begin_id + nsplit, ndevices));
         sch_device_begin_id += nsplit;
 
-        RDMAScheduler* rdma_sch = new RDMAScheduler(sch_devices);
-        rdma_sch->register_memory_region(
-            "buffer_" + std::to_string(socket_id), (uintptr_t)data[socket_id], FLAGS_buffer_size);
-        std::cout << "Target registered MR" << std::endl;
+        for (int qpi = 0; qpi < FLAGS_num_thread; qpi++) {
+            RDMAScheduler* rdma_sch = new RDMAScheduler(sch_devices);
+            rdma_sch->register_memory_region(
+                "buffer_" + std::to_string(socket_id), (uintptr_t)data[socket_id], FLAGS_buffer_size);
+            std::cout << "Target registered MR: "
+                      << "buffer_" << socket_id << std::endl;
 
-        rdma_schs[socket_id] = rdma_sch;
+            rdma_schs[socket_id * FLAGS_num_thread + qpi] = rdma_sch;
+        }
     }
-    for (int socket_id = 0; socket_id < nschedulers; ++socket_id) {
-        init_connection(rdma_schs[socket_id], FLAGS_initiator_endpoint, FLAGS_target_endpoint);
-        std::cout << "Initiator connected remote" << std::endl;
+    for (int sch_id = 0; sch_id < nschedulers; ++sch_id) {
+        init_connection(rdma_schs[sch_id], FLAGS_initiator_endpoint, FLAGS_target_endpoint);
+        std::cout << "Target connected remote" << std::endl;
     }
 
     waitRemoteTeriminate();
 
-    for (int socket_id = 0; socket_id < NR_SOCKETS; ++socket_id)
-        delete rdma_schs[socket_id];
+    for (int sch_id = 0; sch_id < nschedulers; ++sch_id)
+        delete rdma_schs[sch_id];
 
     return 0;
 }
 
 int initiator()
 {
-    size_t nsockets = FLAGS_numa_affinity ? NR_SOCKETS : 1;
-
-    std::vector<void*> data(nsockets, nullptr);
-    for (int socket_id = 0; socket_id < nsockets; ++socket_id) {
-        data[socket_id] = memory_allocate_initiator(socket_id);
-    }
-
-    init_socket(FLAGS_target_endpoint, FLAGS_initiator_endpoint);
+    init_tcp(FLAGS_target_endpoint, FLAGS_initiator_endpoint);
 
     std::vector<std::string> nic_devices;
     if (FLAGS_device_name.empty())
@@ -231,26 +230,38 @@ int initiator()
         nic_devices = split_device_name(',');
 
     size_t ndevices = nic_devices.size();
-    size_t nsplit   = ndevices / nsockets;
+    size_t nsockets = FLAGS_numa_affinity ? NR_SOCKETS : 1;
+    nsockets        = ndevices > nsockets ? nsockets : ndevices;
 
-    int            nschedulers = ndevices > nsockets ? nsockets : ndevices;
+    std::vector<void*> data(nsockets, nullptr);
+    for (int socket_id = 0; socket_id < nsockets; ++socket_id) {
+        data[socket_id] = memory_allocate_initiator(socket_id);
+    }
+    size_t nsplit      = ndevices / nsockets;
+    size_t nschedulers = nsockets * FLAGS_num_thread;
+
     RDMAScheduler* rdma_schs[nschedulers];
 
     int sch_device_begin_id = 0;
-    for (int socket_id = 0; socket_id < nschedulers; ++socket_id) {
+
+    for (int socket_id = 0; socket_id < nsockets; ++socket_id) {
         std::vector<std::string> sch_devices =
             std::vector<std::string>(nic_devices.begin() + sch_device_begin_id,
                                      nic_devices.begin() + std::min(sch_device_begin_id + nsplit, ndevices));
         sch_device_begin_id += nsplit;
 
-        RDMAScheduler* rdma_sch = new RDMAScheduler(sch_devices);
-        rdma_sch->register_memory_region(
-            "buffer_" + std::to_string(socket_id), (uintptr_t)data[socket_id], FLAGS_buffer_size);
-        std::cout << "Initiator registered MR" << std::endl;
-        rdma_schs[socket_id] = rdma_sch;
+        for (int qpi = 0; qpi < FLAGS_num_thread; qpi++) {
+            RDMAScheduler* rdma_sch = new RDMAScheduler(sch_devices);
+            rdma_sch->register_memory_region(
+                "buffer_" + std::to_string(socket_id), (uintptr_t)data[socket_id], FLAGS_buffer_size);
+            std::cout << "Initiator registered MR: "
+                      << "buffer_" << socket_id << std::endl;
+            rdma_schs[socket_id * FLAGS_num_thread + qpi] = rdma_sch;
+        }
     }
-    for (int socket_id = 0; socket_id < nschedulers; ++socket_id) {
-        init_connection(rdma_schs[socket_id], FLAGS_target_endpoint, FLAGS_initiator_endpoint);
+
+    for (int rdma_sch_id = 0; rdma_sch_id < nschedulers; ++rdma_sch_id) {
+        init_connection(rdma_schs[rdma_sch_id], FLAGS_target_endpoint, FLAGS_initiator_endpoint);
         std::cout << "Initiator connected remote" << std::endl;
     }
 
@@ -264,19 +275,21 @@ int initiator()
         RDMASchedulerAssignmentSharedPtrBatch rdma_scheduler_assignment_batch;
         for (int concurrent_id = 0; concurrent_id < FLAGS_concurrent_num; concurrent_id++) {
             for (int socket_id = 0; socket_id < nsockets; ++socket_id) {
-                AssignmentBatch batch{};
-                for (int batch_id = 0; batch_id < FLAGS_batch_size; ++batch_id) {
-                    Assignment assign = Assignment("buffer_" + std::to_string(socket_id),
-                                                   batch_id * FLAGS_block_size,
-                                                   batch_id * FLAGS_block_size,
-                                                   FLAGS_block_size);
-                    batch.emplace_back(assign);
+                for (int qpi = 0; qpi < FLAGS_num_thread; qpi++) {
+                    AssignmentBatch batch{};
+                    for (int batch_id = 0; batch_id < FLAGS_batch_size; ++batch_id) {
+                        Assignment assign = Assignment("buffer_" + std::to_string(socket_id),
+                                                       batch_id * FLAGS_block_size,
+                                                       batch_id * FLAGS_block_size,
+                                                       FLAGS_block_size);
+                        batch.emplace_back(assign);
+                    }
+                    RDMASchedulerAssignmentSharedPtr sch_assignment =
+                        rdma_schs[socket_id * FLAGS_num_thread + qpi]->submitAssignment(OpCode::READ, batch);
+                    rdma_scheduler_assignment_batch.emplace_back(sch_assignment);
+                    total_bytes += FLAGS_batch_size * FLAGS_block_size;
+                    total_trips += 1;
                 }
-                RDMASchedulerAssignmentSharedPtr sch_assignment =
-                    rdma_schs[socket_id]->submitAssignment(OpCode::READ, batch);
-                rdma_scheduler_assignment_batch.emplace_back(sch_assignment);
-                total_bytes += FLAGS_batch_size * FLAGS_block_size;
-                total_trips += 1;
             }
         }
         for (RDMASchedulerAssignmentSharedPtr sch_assignment : rdma_scheduler_assignment_batch) {
@@ -299,11 +312,12 @@ int initiator()
 
     teriminate();
 
-    for (int socket_id = 0; socket_id < nsockets; ++socket_id)
-        SLIME_ASSERT(checkInitiatorCopied(data[socket_id]), "Transferred data not equal!");
+    for (int sch_id = 0; sch_id < nschedulers; ++sch_id) {
+        SLIME_ASSERT(checkInitiatorCopied(data[sch_id / FLAGS_num_thread]), "Transferred data not equal!");
+    }
 
-    for (int socket_id = 0; socket_id < nsockets; ++socket_id)
-        delete rdma_schs[socket_id];
+    for (int sch_id = 0; sch_id < nschedulers; ++sch_id)
+        delete rdma_schs[sch_id];
 
     return 0;
 }

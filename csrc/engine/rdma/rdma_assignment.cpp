@@ -6,6 +6,7 @@ namespace slime {
 RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
     opcode_     = opcode;
+
     batch_size_ = batch.size();
     batch_      = new Assignment[batch_size_];
 

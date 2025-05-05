@@ -16,8 +16,6 @@
 
 namespace slime {
 
-class RDMAContext;
-class RDMAScheduler;
 class RDMAAssignment;
 class RDMASchedulerAssignment;
 
@@ -87,7 +85,8 @@ public:
     void        print();
 
 private:
-    OpCode      opcode_;
+    OpCode opcode_;
+
     Assignment* batch_{nullptr};
     size_t      batch_size_;
 
@@ -98,7 +97,7 @@ class RDMASchedulerAssignment {
     friend class RDMAScheduler;
 
 public:
-    RDMASchedulerAssignment(RDMAAssignmentSharedPtrBatch rdma_assignment_batch):
+    RDMASchedulerAssignment(RDMAAssignmentSharedPtrBatch& rdma_assignment_batch):
         rdma_assignment_batch_(std::move(rdma_assignment_batch))
     {
     }

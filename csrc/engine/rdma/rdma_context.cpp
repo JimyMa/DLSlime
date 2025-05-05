@@ -24,7 +24,13 @@
 #include <stdexcept>
 
 namespace slime {
-int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string link_type)
+
+typedef struct callback_info_with_qpi {
+    callback_info_t* callback_info_;
+    int              qpi_;
+} callback_info_with_qpi_t;
+
+int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type)
 {
     device_name_ = dev_name;
     uint16_t      lid;
@@ -64,13 +70,14 @@ int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string lin
     }
 
     if (!ib_ctx_) {
-        SLIME_LOG_WARN("Can't find or failed to open the specified device, try to open "
-                       "the default device "
-                       << (char*)ibv_get_device_name(dev_list[0]));
+        SLIME_LOG_WARN("Can't find or failed to open the specified device",
+                       dev_name,
+                       ", try to open "
+                       "the default device ",
+                       (char*)ibv_get_device_name(dev_list[0]));
         ib_ctx_ = ibv_open_device(dev_list[0]);
         if (!ib_ctx_) {
-            SLIME_LOG_ERROR("Failed to open the default device");
-            return -1;
+            throw std::runtime_error("Failed to open the default device");
         }
     }
 
@@ -80,12 +87,12 @@ int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string lin
     SLIME_LOG_DEBUG("Max Memory Region:" << device_attr.max_mr);
     SLIME_LOG_DEBUG("Max Memory Region Size:" << device_attr.max_mr_size);
     SLIME_LOG_DEBUG("Max Memory QP WR:" << device_attr.max_qp_wr);
+    SLIME_LOG_DEBUG("total ib ports:" << (int)device_attr.phys_port_cnt);
 
     struct ibv_port_attr port_attr;
     ib_port_ = ib_port;
     if (ibv_query_port(ib_ctx_, ib_port, &port_attr)) {
-        SLIME_LOG_ERROR("Unable to query port {} attributes\n" << ib_port_);
-        return -1;
+        throw std::runtime_error("Unable to query port " + std::to_string(ib_port_) + " attributes\n");
     }
     if ((port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND && link_type == "RoCE")
         || (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET && link_type == "IB")) {
@@ -120,54 +127,57 @@ int64_t RDMAContext::init(std::string dev_name, uint8_t ib_port, std::string lin
     cq_           = ibv_create_cq(ib_ctx_, MAX_SEND_WR + MAX_RECV_WR, NULL, comp_channel_, 0);
     SLIME_ASSERT(cq_, "create CQ failed");
 
-    /* Create Queue Pair (QP) */
-    struct ibv_qp_init_attr qp_init_attr = {};
-    qp_init_attr.send_cq                 = cq_;
-    qp_init_attr.recv_cq                 = cq_;
-    qp_init_attr.qp_type                 = IBV_QPT_RC;  // Reliable Connection
-    qp_init_attr.cap.max_send_wr         = MAX_SEND_WR;
-    qp_init_attr.cap.max_recv_wr         = MAX_RECV_WR;
-    qp_init_attr.cap.max_send_sge        = 1;
-    qp_init_attr.cap.max_recv_sge        = 1;
-    qp_init_attr.sq_sig_all              = false;
+    for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
+        /* Create Queue Pair (QP) */
+        struct ibv_qp_init_attr qp_init_attr = {};
+        qp_init_attr.send_cq                 = cq_;
+        qp_init_attr.recv_cq                 = cq_;
+        qp_init_attr.qp_type                 = IBV_QPT_RC;  // Reliable Connection
+        qp_init_attr.cap.max_send_wr         = MAX_SEND_WR;
+        qp_init_attr.cap.max_recv_wr         = MAX_RECV_WR;
+        qp_init_attr.cap.max_send_sge        = 4;
+        qp_init_attr.cap.max_recv_sge        = 4;
+        qp_init_attr.sq_sig_all              = false;
+        qp_management_t* qp_man              = qp_management_[qpi];
+        rdma_info_t&     local_rdma_info     = qp_man->local_rdma_info_;
+        qp_man->qp_                          = ibv_create_qp(pd_, &qp_init_attr);
+        if (!qp_man->qp_) {
+            SLIME_LOG_ERROR("Failed to create QP");
+            return -1;
+        }
 
-    qp_ = ibv_create_qp(pd_, &qp_init_attr);
-    if (!qp_) {
-        SLIME_LOG_ERROR("Failed to create QP");
-        return -1;
+        /* Modify QP to INIT state */
+        struct ibv_qp_attr attr = {};
+        attr.qp_state           = IBV_QPS_INIT;
+        attr.port_num           = ib_port_;
+        attr.pkey_index         = 0;
+        attr.qp_access_flags =
+            IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
+
+        int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS;
+
+        int ret = ibv_modify_qp(qp_man->qp_, &attr, flags);
+        if (ret) {
+            SLIME_LOG_ERROR("Failed to modify QP to INIT");
+        }
+
+        /* Set Packet Sequence Number (PSN) */
+        srand48(time(NULL));
+        psn = lrand48() & 0xffffff;
+
+        /* Get GID */
+        if (gidx != -1 && ibv_query_gid(ib_ctx_, 1, gidx, &gid)) {
+            SLIME_LOG_ERROR("Failed to get GID");
+        }
+
+        /* Set Local RDMA Info */
+        local_rdma_info.gidx = gidx;
+        local_rdma_info.qpn  = qp_man->qp_->qp_num;
+        local_rdma_info.psn  = psn;
+        local_rdma_info.gid  = gid;
+        local_rdma_info.lid  = lid;
+        local_rdma_info.mtu  = (uint32_t)active_mtu;
     }
-
-    /* Modify QP to INIT state */
-    struct ibv_qp_attr attr = {};
-    attr.qp_state           = IBV_QPS_INIT;
-    attr.port_num           = ib_port_;
-    attr.pkey_index         = 0;
-    attr.qp_access_flags =
-        IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
-
-    int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS;
-
-    int ret = ibv_modify_qp(qp_, &attr, flags);
-    if (ret) {
-        SLIME_LOG_ERROR("Failed to modify QP to INIT");
-    }
-
-    /* Set Packet Sequence Number (PSN) */
-    srand48(time(NULL));
-    psn = lrand48() & 0xffffff;
-
-    /* Get GID */
-    if (gidx != -1 && ibv_query_gid(ib_ctx_, 1, gidx, &gid)) {
-        SLIME_LOG_ERROR("Failed to get GID");
-    }
-
-    /* Set Local RDMA Info */
-    local_rdma_info_.gidx = gidx;
-    local_rdma_info_.qpn  = qp_->qp_num;
-    local_rdma_info_.psn  = psn;
-    local_rdma_info_.gid  = gid;
-    local_rdma_info_.lid  = lid;
-    local_rdma_info_.mtu  = (uint32_t)active_mtu;
 
     initialized_ = true;
 
@@ -182,73 +192,76 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
     }
 
     // construct RDMAEndpoint connection
-    RDMAInfo remote_rdma_info = RDMAInfo(endpoint_info_json["rdma_info"]);
-
-    int                ret;
-    struct ibv_qp_attr attr = {};
-    int                flags;
-
     SLIME_ASSERT(!connected_, "Already connected!");
-    remote_rdma_info_ = std::move(remote_rdma_info);
+    for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+        int                ret;
+        struct ibv_qp_attr attr = {};
+        int                flags;
+        qp_management_t*   qp_man           = qp_management_[qpi];
+        struct ibv_qp*     qp               = qp_man->qp_;
+        rdma_info_t&       local_rdma_info  = qp_man->local_rdma_info_;
+        rdma_info_t&       remote_rdma_info = qp_man->remote_rdma_info_;
+        remote_rdma_info                    = rdma_info_t(endpoint_info_json["rdma_info"][qpi]);
 
-    // Modify QP to Ready to Receive (RTR) state
-    memset(&attr, 0, sizeof(attr));
-    attr.qp_state           = IBV_QPS_RTR;
-    attr.path_mtu           = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info_.mtu, (uint32_t)local_rdma_info_.mtu);
-    attr.dest_qp_num        = remote_rdma_info_.qpn;
-    attr.rq_psn             = remote_rdma_info_.psn;
-    attr.max_dest_rd_atomic = 16;
-    attr.min_rnr_timer      = 12;
-    attr.ah_attr.dlid       = 0;
-    attr.ah_attr.sl         = 0;
-    attr.ah_attr.src_path_bits = 0;
-    attr.ah_attr.port_num      = 1;
+        // Modify QP to Ready to Receive (RTR) state
+        memset(&attr, 0, sizeof(attr));
+        attr.qp_state           = IBV_QPS_RTR;
+        attr.path_mtu           = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info.mtu, (uint32_t)local_rdma_info.mtu);
+        attr.dest_qp_num        = remote_rdma_info.qpn;
+        attr.rq_psn             = remote_rdma_info.psn;
+        attr.max_dest_rd_atomic = 16;
+        attr.min_rnr_timer      = 12;
+        attr.ah_attr.dlid       = 0;
+        attr.ah_attr.sl         = 0;
+        attr.ah_attr.src_path_bits = 0;
+        attr.ah_attr.port_num      = 1;
 
-    if (local_rdma_info_.gidx == -1) {
-        // IB
-        attr.ah_attr.dlid      = local_rdma_info_.lid;
-        attr.ah_attr.is_global = 0;
-    }
-    else {
-        // RoCE v2
-        attr.ah_attr.is_global      = 1;
-        attr.ah_attr.grh.dgid       = remote_rdma_info.gid;
-        attr.ah_attr.grh.sgid_index = local_rdma_info_.gidx;
-        attr.ah_attr.grh.hop_limit  = 1;
-    }
+        if (local_rdma_info.gidx == -1) {
+            // IB
+            attr.ah_attr.dlid      = local_rdma_info.lid;
+            attr.ah_attr.is_global = 0;
+        }
+        else {
+            // RoCE v2
+            attr.ah_attr.is_global      = 1;
+            attr.ah_attr.grh.dgid       = remote_rdma_info.gid;
+            attr.ah_attr.grh.sgid_index = local_rdma_info.gidx;
+            attr.ah_attr.grh.hop_limit  = 1;
+        }
 
-    flags = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC
-            | IBV_QP_MIN_RNR_TIMER;
+        flags = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC
+                | IBV_QP_MIN_RNR_TIMER;
 
-    ret = ibv_modify_qp(qp_, &attr, flags);
-    if (ret) {
-        SLIME_LOG_ERROR("Failed to modify QP to RTR: reason: " << strerror(ret));
-        return -1;
-    }
+        ret = ibv_modify_qp(qp, &attr, flags);
+        if (ret) {
+            SLIME_LOG_ERROR("Failed to modify QP to RTR: reason: " << strerror(ret));
+            return -1;
+        }
 
-    // Modify QP to RTS state
-    memset(&attr, 0, sizeof(attr));
-    attr.qp_state      = IBV_QPS_RTS;
-    attr.timeout       = 14;
-    attr.retry_cnt     = 7;
-    attr.rnr_retry     = 7;
-    attr.sq_psn        = local_rdma_info_.psn;
-    attr.max_rd_atomic = 16;
+        // Modify QP to RTS state
+        memset(&attr, 0, sizeof(attr));
+        attr.qp_state      = IBV_QPS_RTS;
+        attr.timeout       = 14;
+        attr.retry_cnt     = 7;
+        attr.rnr_retry     = 7;
+        attr.sq_psn        = local_rdma_info.psn;
+        attr.max_rd_atomic = 16;
 
-    flags =
-        IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
+        flags = IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN
+                | IBV_QP_MAX_QP_RD_ATOMIC;
 
-    ret = ibv_modify_qp(qp_, &attr, flags);
-    if (ret) {
-        SLIME_LOG_ERROR("Failed to modify QP to RTS");
-        return -1;
-    }
-    SLIME_LOG_INFO("RDMA exchange done");
-    connected_ = true;
+        ret = ibv_modify_qp(qp, &attr, flags);
+        if (ret) {
+            SLIME_LOG_ERROR("Failed to modify QP to RTS");
+            return -1;
+        }
+        SLIME_LOG_INFO("RDMA exchange done");
+        connected_ = true;
 
-    if (ibv_req_notify_cq(cq_, 0)) {
-        SLIME_LOG_ERROR("Failed to request notify for CQ");
-        return -1;
+        if (ibv_req_notify_cq(cq_, 0)) {
+            SLIME_LOG_ERROR("Failed to request notify for CQ");
+            return -1;
+        }
     }
     return 0;
 }
@@ -256,16 +269,20 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 void RDMAContext::launch_future()
 {
     cq_future_ = std::async(std::launch::async, [this]() -> void { cq_poll_handle(); });
-    wq_future_ = std::async(std::launch::async, [this]() -> void { wq_dispatch_handle(); });
+    for (int qpi = 0; qpi < qp_list_len_; qpi++)
+        qp_management_[qpi]->wq_future_ =
+            std::async(std::launch::async, [this, qpi]() -> void { wq_dispatch_handle(qpi); });
 }
 
 void RDMAContext::stop_future()
 {
     // Stop work queue dispatch
-    if (!stop_wq_future_ && wq_future_.valid()) {
-        stop_wq_future_ = true;
-        has_runnable_event_.notify_one();
-        wq_future_.get();
+    for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
+        if (!qp_management_[qpi]->stop_wq_future_ && qp_management_[qpi]->wq_future_.valid()) {
+            qp_management_[qpi]->stop_wq_future_ = true;
+            qp_management_[qpi]->has_runnable_event_.notify_one();
+            qp_management_[qpi]->wq_future_.get();
+        }
     }
 
     if (!stop_cq_future_ && cq_future_.valid()) {
@@ -290,8 +307,8 @@ void RDMAContext::stop_future()
 
         struct ibv_send_wr* bad_send_wr;
         {
-            std::unique_lock<std::mutex> lock(rdma_post_send_mutex_);
-            ibv_post_send(qp_, &send_wr, &bad_send_wr);
+            std::unique_lock<std::mutex> lock(qp_management_[0]->rdma_post_send_mutex_);
+            ibv_post_send(qp_management_[0]->qp_, &send_wr, &bad_send_wr);
         }
         // wait thread done
         cq_future_.get();
@@ -300,14 +317,15 @@ void RDMAContext::stop_future()
 
 RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
-    std::unique_lock<std::mutex> lock(assign_queue_mutex_);
+    int                          qpi = selectRdma();
+    std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
     RDMAAssignmentSharedPtr      rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch, callback);
-    assign_queue_.push(rdma_assignment);
-    has_runnable_event_.notify_one();
+    qp_management_[qpi]->assign_queue_.push(rdma_assignment);
+    qp_management_[qpi]->has_runnable_event_.notify_one();
     return rdma_assignment;
 }
 
-int64_t RDMAContext::post_send(RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_send(int qpi, RDMAAssignmentSharedPtr assign)
 {
     int ret;
 
@@ -330,8 +348,9 @@ int64_t RDMAContext::post_send(RDMAAssignmentSharedPtr assign)
     wr.send_flags = IBV_SEND_SIGNALED;
 
     {
-        std::unique_lock<std::mutex> lock(rdma_post_send_mutex_);
-        ret = ibv_post_send(qp_, &wr, &bad_wr);
+        std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
+        ret = ibv_post_send(qp_management_[qpi]->qp_, &wr, &bad_wr);
     }
 
     if (ret) {
@@ -342,8 +361,9 @@ int64_t RDMAContext::post_send(RDMAAssignmentSharedPtr assign)
     return 0;
 }
 
-int64_t RDMAContext::post_recv(RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_recv(int qpi, RDMAAssignmentSharedPtr assign)
 {
+
     int ret;
 
     struct ibv_mr* mr        = memory_pool_.get_mr(assign->batch_[0].mr_key);
@@ -363,8 +383,9 @@ int64_t RDMAContext::post_recv(RDMAAssignmentSharedPtr assign)
     wr.num_sge = 1;
 
     {
-        std::unique_lock<std::mutex> lock(rdma_post_send_mutex_);
-        ret = ibv_post_recv(qp_, &wr, &bad_wr);
+        std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
+        ret = ibv_post_recv(qp_management_[qpi]->qp_, &wr, &bad_wr);
     }
 
     if (ret) {
@@ -375,7 +396,7 @@ int64_t RDMAContext::post_recv(RDMAAssignmentSharedPtr assign)
     return 0;
 }
 
-int64_t RDMAContext::post_read_batch(RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_read_batch(int qpi, RDMAAssignmentSharedPtr assign)
 {
     size_t              batch_size = assign->batch_size();
     struct ibv_send_wr* bad_wr     = NULL;
@@ -393,7 +414,8 @@ int64_t RDMAContext::post_read_batch(RDMAAssignmentSharedPtr assign)
         sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
 
-        wr[i].wr_id               = (i == batch_size - 1) ? (uintptr_t)(assign->callback_info_) : 0;
+        wr[i].wr_id =
+            (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
         wr[i].opcode              = IBV_WR_RDMA_READ;
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
@@ -405,8 +427,9 @@ int64_t RDMAContext::post_read_batch(RDMAAssignmentSharedPtr assign)
 
     int ret = 0;
     {
-        std::unique_lock<std::mutex> lock(rdma_post_send_mutex_);
-        ret = ibv_post_send(qp_, wr, &bad_wr);
+        std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
+        ret = ibv_post_send(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
 
     delete[] wr;
@@ -462,22 +485,25 @@ int64_t RDMAContext::cq_poll_handle()
                     status_code = 200;
                 }
                 else {
-                    SLIME_LOG_ERROR("WR failed with status: " << ibv_wc_status_str(wc[i].status) << std::endl);
+                    SLIME_LOG_ERROR("WR failed with status: ", ibv_wc_status_str(wc[i].status), std::endl);
                     status_code = wc[i].status;
                 }
                 if (wc[i].wr_id != 0) {
-                    callback_info_t* assign = reinterpret_cast<callback_info_t*>(wc[i].wr_id);
-                    switch (OpCode wr_type = assign->opcode_) {
+                    callback_info_with_qpi_t* callback_with_qpi =
+                        reinterpret_cast<callback_info_with_qpi_t*>(wc[i].wr_id);
+                    switch (OpCode wr_type = callback_with_qpi->callback_info_->opcode_) {
                         case OpCode::READ:
                         case OpCode::SEND:
                         case OpCode::RECV:
-                            assign->callback_(status_code);
+                            callback_with_qpi->callback_info_->callback_(status_code);
                             break;
                         default:
                             SLIME_ABORT("Unimplemented WrType " << int64_t(wr_type));
                     }
-                    size_t batch_size = assign->batch_size_;
-                    outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
+                    size_t batch_size = callback_with_qpi->callback_info_->batch_size_;
+                    qp_management_[callback_with_qpi->qpi_]->outstanding_rdma_reads_.fetch_sub(
+                        batch_size, std::memory_order_relaxed);
+                    delete callback_with_qpi;
                 }
             }
         }
@@ -485,7 +511,7 @@ int64_t RDMAContext::cq_poll_handle()
     return 0;
 }
 
-int64_t RDMAContext::wq_dispatch_handle()
+int64_t RDMAContext::wq_dispatch_handle(int qpi)
 {
     SLIME_LOG_INFO("Handling WQ");
 
@@ -497,39 +523,38 @@ int64_t RDMAContext::wq_dispatch_handle()
     if (comp_channel_ == NULL)
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
 
-    while (!stop_wq_future_) {
-        std::unique_lock<std::mutex> lock(assign_queue_mutex_);
-        has_runnable_event_.wait(lock, [this]() { return !assign_queue_.empty() || stop_wq_future_; });
-        if (stop_wq_future_)
+    while (!qp_management_[qpi]->stop_wq_future_) {
+        std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
+        qp_management_[qpi]->has_runnable_event_.wait(lock, [this, &qpi]() {
+            return !(qp_management_[qpi]->assign_queue_.empty()) || qp_management_[qpi]->stop_wq_future_;
+        });
+        if (qp_management_[qpi]->stop_wq_future_)
             return 0;
-        while (!assign_queue_.empty()) {
-            RDMAAssignmentSharedPtr front_assign = assign_queue_.front();
+        while (!(qp_management_[qpi]->assign_queue_.empty())) {
+            RDMAAssignmentSharedPtr front_assign = qp_management_[qpi]->assign_queue_.front();
             size_t                  batch_size   = front_assign->batch_size();
             if (batch_size > MAX_SEND_WR) {
                 SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SEND WR(" << MAX_SEND_WR
                                               << "), this request will be ignored");
                 front_assign->callback_info_->callback_(500);
-                assign_queue_.pop();
+                qp_management_[qpi]->assign_queue_.pop();
             }
-            else if (batch_size + outstanding_rdma_reads_ < MAX_SEND_WR) {
+            else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < MAX_SEND_WR) {
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
-                        outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
-                        post_send(front_assign);
+                        post_send(qpi, front_assign);
                         break;
                     case OpCode::RECV:
-                        outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
-                        post_recv(front_assign);
+                        post_recv(qpi, front_assign);
                         break;
                     case OpCode::READ:
-                        outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
-                        post_read_batch(front_assign);
+                        post_read_batch(qpi, front_assign);
                         break;
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");
                         front_assign->callback_info_->callback_(500);
                 }
-                assign_queue_.pop();
+                qp_management_[qpi]->assign_queue_.pop();
             }
             else {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(500000));

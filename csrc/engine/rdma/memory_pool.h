@@ -48,7 +48,7 @@ public:
     {
         if (remote_mrs_.find(mr_key) != remote_mrs_.end())
             return remote_mrs_[mr_key];
-        SLIME_LOG_ERROR("mr_key: ", mr_key, "not found in remote_mrs_");
+        SLIME_LOG_ERROR("mr_key: ", mr_key, " not found in remote_mrs_");
         return remote_mr_t();
     }
 

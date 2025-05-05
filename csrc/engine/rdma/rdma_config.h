@@ -19,20 +19,20 @@ namespace slime {
 
 using json = nlohmann::json;
 
-typedef struct RDMAInfo {
+typedef struct rdma_info {
     uint32_t      qpn;
     union ibv_gid gid;
     int64_t       gidx;
     uint16_t      lid;
     uint64_t      psn;
     uint64_t      mtu;
-    RDMAInfo() {}
-    RDMAInfo(uint32_t qpn, union ibv_gid gid, int64_t gidx, uint16_t lid, uint64_t psn, uint64_t mtu):
+    rdma_info() {}
+    rdma_info(uint32_t qpn, union ibv_gid gid, int64_t gidx, uint16_t lid, uint64_t psn, uint64_t mtu):
         qpn(qpn), gidx(gidx), lid(lid), psn(psn), mtu(mtu), gid(gid)
     {
     }
 
-    RDMAInfo(json json_config)
+    rdma_info(json json_config)
     {
         gid.global.subnet_prefix = json_config["gid"]["subnet_prefix"];
         gid.global.interface_id  = json_config["gid"]["interface_id"];

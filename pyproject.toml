@@ -16,7 +16,7 @@ description = "DLSlime Transfer Engine"
 name = "dlslime"
 readme = "README.md"
 requires-python = ">=3.8"
-version = "0.0.1.post6"
+version = "0.0.1.post7"
 
 [project.urls]
 Homepage = "https://github.com/JimyMa/dlslime.git"

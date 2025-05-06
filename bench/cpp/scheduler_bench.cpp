@@ -250,7 +250,7 @@ int initiator()
                                      nic_devices.begin() + std::min(sch_device_begin_id + nsplit, ndevices));
         sch_device_begin_id += nsplit;
 
-        for (int qpi = 0; qpi < FLAGS_num_thread; qpi++) {
+        for (int qpi = 0; qpi < FLAGS_num_thread; ++qpi) {
             RDMAScheduler* rdma_sch = new RDMAScheduler(sch_devices);
             rdma_sch->register_memory_region(
                 "buffer_" + std::to_string(socket_id), (uintptr_t)data[socket_id], FLAGS_buffer_size);
@@ -273,9 +273,9 @@ int initiator()
 
     while (std::chrono::steady_clock::now() < deadline) {
         RDMASchedulerAssignmentSharedPtrBatch rdma_scheduler_assignment_batch;
-        for (int concurrent_id = 0; concurrent_id < FLAGS_concurrent_num; concurrent_id++) {
+        for (int concurrent_id = 0; concurrent_id < FLAGS_concurrent_num; ++concurrent_id) {
             for (int socket_id = 0; socket_id < nsockets; ++socket_id) {
-                for (int qpi = 0; qpi < FLAGS_num_thread; qpi++) {
+                for (int qpi = 0; qpi < FLAGS_num_thread; ++qpi) {
                     AssignmentBatch batch{};
                     for (int batch_id = 0; batch_id < FLAGS_batch_size; ++batch_id) {
                         Assignment assign = Assignment("buffer_" + std::to_string(socket_id),

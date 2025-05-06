@@ -23,7 +23,7 @@ int NVLinkMemoryPool::register_remote_memory_region(const std::string& mr_key, c
 {
     char*              remote_ptr;
     cudaIpcMemHandle_t ipc_handle;
-    for (int i = 0; i < CUDA_IPC_HANDLE_SIZE; i++)
+    for (int i = 0; i < CUDA_IPC_HANDLE_SIZE; ++i)
         ipc_handle.reserved[i] = mr_info["ipc_handle"][i].get<char>();
     cudaIpcOpenMemHandle((void**)&remote_ptr, ipc_handle, cudaIpcMemLazyEnablePeerAccess);
     remote_mrs_[mr_key] = nvlink_mr({(uintptr_t)remote_ptr, mr_info["offset"], mr_info["length"], ipc_handle});

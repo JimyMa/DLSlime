@@ -152,7 +152,7 @@ int initiator(RDMAContext& rdma_context)
         int done = false;
 
         std::vector<RDMAAssignmentSharedPtr> rdma_assignment_batch;
-        for (int i = 0; i < FLAGS_concurrent_num; i++) {
+        for (int concurrent_id = 0; concurrent_id < FLAGS_concurrent_num; ++concurrent_id) {
             AssignmentBatch batch;
             for (int i = 0; i < FLAGS_batch_size; ++i) {
                 batch.push_back(Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size));

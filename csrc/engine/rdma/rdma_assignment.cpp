@@ -34,7 +34,7 @@ bool RDMAAssignment::query()
 std::string RDMAAssignment::dump()
 {
     std::string rdma_assignment_dump = "";
-    for (int i = 0; i < batch_size_; i++) {
+    for (int i = 0; i < batch_size_; ++i) {
         rdma_assignment_dump += batch_[i].dump() + "\n";
     }
     return rdma_assignment_dump;

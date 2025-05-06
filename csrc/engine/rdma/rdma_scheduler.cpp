@@ -87,8 +87,10 @@ RDMASchedulerAssignmentSharedPtr RDMAScheduler::submitAssignment(OpCode opcode, 
 
     RDMAAssignmentSharedPtrBatch rdma_assignment_batch;
     for (int i = 0; i < rdma_ctxs_.size(); i++) {
+        if (!rdma_index_to_assignments_[i].empty()) {
         RDMAAssignmentSharedPtr rdma_assignment = rdma_ctxs_[i].submit(opcode, rdma_index_to_assignments_[i]);
         rdma_assignment_batch.push_back(rdma_assignment);
+        }
     }
 
     return std::make_shared<RDMASchedulerAssignment>(rdma_assignment_batch);

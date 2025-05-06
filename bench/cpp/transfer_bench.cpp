@@ -24,8 +24,6 @@
 using json = nlohmann::json;
 using namespace slime;
 
-#define TERMINATE 0
-
 DEFINE_string(mode, "target", "initiator or target");
 
 DEFINE_string(device_name, "mlx5_bond_0", "device name");

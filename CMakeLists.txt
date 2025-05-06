@@ -21,7 +21,7 @@ enable_language(CUDA)
 find_package(CUDAToolkit REQUIRED)
 
 # Supported NVIDIA architectures.
-set(CUDA_SUPPORTED_ARCHS "7.0;7.5;8.0;8.6;8.9;9.0")
+set(CUDA_SUPPORTED_ARCHS "7.0;7.2;7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;12.0")
 endif()
 
 include_directories(csrc)

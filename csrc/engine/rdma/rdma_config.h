@@ -13,9 +13,9 @@
 
 namespace slime {
 
-#define MAX_SEND_WR 8192
-#define MAX_RECV_WR 8192
-#define POLL_COUNT 256
+const static int MAX_SEND_WR = 8192;
+const static int MAX_RECV_WR = 8192;
+const static int POLL_COUNT = 256;
 
 using json = nlohmann::json;
 

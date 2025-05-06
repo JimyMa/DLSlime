@@ -30,8 +30,6 @@
 using json = nlohmann::json;
 using namespace slime;
 
-#define TERMINATE 0
-
 DEFINE_string(mode, "", "initiator or target");
 
 DEFINE_string(device_name, "", "device name");

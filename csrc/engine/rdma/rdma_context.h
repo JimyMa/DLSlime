@@ -140,7 +140,7 @@ private:
         std::atomic<bool> stop_wq_future_{false};
     } qp_management_t;
 
-    size_t            qp_list_len_{8};
+    size_t            qp_list_len_{4};
     qp_management_t** qp_management_;
 
     typedef struct cq_management {

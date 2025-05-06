@@ -77,21 +77,24 @@ int RDMAScheduler::connect(const json& remote_info)
 
 RDMASchedulerAssignmentSharedPtr RDMAScheduler::submitAssignment(OpCode opcode, AssignmentBatch& batch)
 {
-    size_t batch_size = batch.size();
-    rdma_index_to_assignments_.clear();
-    size_t total_ctxs = rdma_ctxs_.size();
+    // size_t batch_size = batch.size();
+    // rdma_index_to_assignments_.clear();
+    // size_t total_ctxs = rdma_ctxs_.size();
 
-    for (int i = 0; i < batch_size; ++i) {
-        rdma_index_to_assignments_[selectRdma()].push_back(batch[i]);
-    }
+    // for (int i = 0; i < batch_size; ++i) {
+    //     rdma_index_to_assignments_[selectRdma()].push_back(batch[i]);
+    // }
+
+    // RDMAAssignmentSharedPtrBatch rdma_assignment_batch;
+    // for (int i = 0; i < rdma_ctxs_.size(); i++) {
+    //     if (!rdma_index_to_assignments_[i].empty()) {
+    //         RDMAAssignmentSharedPtr rdma_assignment = rdma_ctxs_[i].submit(opcode, rdma_index_to_assignments_[i]);
+    //         rdma_assignment_batch.push_back(rdma_assignment);
+    //     }
+    // }
 
     RDMAAssignmentSharedPtrBatch rdma_assignment_batch;
-    for (int i = 0; i < rdma_ctxs_.size(); i++) {
-        if (!rdma_index_to_assignments_[i].empty()) {
-        RDMAAssignmentSharedPtr rdma_assignment = rdma_ctxs_[i].submit(opcode, rdma_index_to_assignments_[i]);
-        rdma_assignment_batch.push_back(rdma_assignment);
-        }
-    }
+    rdma_assignment_batch.push_back(rdma_ctxs_[selectRdma()].submit(opcode, batch));
 
     return std::make_shared<RDMASchedulerAssignment>(rdma_assignment_batch);
 }

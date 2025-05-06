@@ -55,7 +55,8 @@ inline int get_log_level()
             std::cerr << "\033[1;91m"                                                                                  \
                       << "[Assertion Failed]"                                                                          \
                       << "\033[m " << __FILE__ << ": " << __FUNCTION__ << ": Line" << __LINE__                         \
-                      << ", Expected :" << #Expr << Msg __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__)) << std::endl;         \
+                      << ", Expected: " << #Expr << ". Error msg: " << Msg __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__))    \
+                      << std::endl;                                                                                    \
             abort();                                                                                                   \
         }                                                                                                              \
     }

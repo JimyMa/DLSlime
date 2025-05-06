@@ -44,10 +44,16 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+typedef enum class ibv_gid_type_custom: uint8_t {
+    IBV_GID_TYPE_IB,
+    IBV_GID_TYPE_ROCE_V1,
+    IBV_GID_TYPE_ROCE_V2,
+} ibv_gid_type_custom_t;
+
 int ibv_read_sysfs_file(const char* dir, const char* file, char* buf, size_t size);
 
 /* GID types as appear in sysfs, no change is expected as of ABI
  * compatibility.
  */
-int ibv_query_gid_type(struct ibv_context* context, uint8_t port_num, unsigned int index, enum ibv_gid_type* type);
-int ibv_find_sgid_type(struct ibv_context* context, uint8_t port_num, enum ibv_gid_type gid_type, int gid_family);
+int ibv_query_gid_type(struct ibv_context* context, uint8_t port_num, unsigned int index, ibv_gid_type_custom_t* type);
+int ibv_find_sgid_type(struct ibv_context* context, uint8_t port_num, ibv_gid_type_custom_t gid_type, int gid_family);

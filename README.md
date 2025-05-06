@@ -28,8 +28,8 @@ target.register_memory_region("buffer", remote_tensor...)
 # 1. Target connects to initiator's endpoint information
 # 2. Initiator connects to target's endpoint information
 # Note: Real-world scenarios typically use out-of-band exchange (e.g., via TCP)
-target.connect_to(initiator.local_endpoint_info)
-initiator.connect_to(target.local_endpoint_info)
+target.connect(initiator.local_endpoint_info)
+initiator.connect(target.local_endpoint_info)
 
 # Execute asynchronous batch read operation:
 asyncio.run(initiator.async_read_batch("buffer", [0], [8], 8))
@@ -40,7 +40,8 @@ asyncio.run(initiator.async_read_batch("buffer", [0], [8], 8))
 - Details in [sendrecv.py](example/sendrecv.py)
 
 #### Sender
-``` python
+
+```python
 # RDMA init and RDMA Connect just like RDMA Read
 ...
 
@@ -52,7 +53,7 @@ asyncio.run(endpoint.send_async("buffer", 0, 8))
 
 #### Receiver
 
-``` python
+```python
 # RDMA init and RDMA Connect just like RDMA Read
 ...
 
@@ -64,9 +65,9 @@ asyncio.run(endpoint.recv_async("buffer", 8, 8))
 
 ## Build
 
-``` bash
+```bash
 # on CentOS
-sudo yum install cppzmq-devel gflags-devel  cmake 
+sudo yum install cppzmq-devel gflags-devel  cmake
 
 # on Ubuntu
 sudo apt install libzmq-dev libgflags-dev cmake
@@ -78,7 +79,7 @@ cmake -DBUILD_BENCH=ON -DBUILD_PYTHON=ON ..; make
 
 ## Benchmark
 
-``` bash
+```bash
 # Target
 ./bench/transfer_bench                \
   --remote-endpoint=10.130.8.138:8000 \
@@ -90,8 +91,8 @@ cmake -DBUILD_BENCH=ON -DBUILD_PYTHON=ON ..; make
 
 # Initiator
 ./bench/transfer_bench                \
-  --remote-endpoint=10.130.8.139:8000 \ 
-  --local-endpoint=10.130.8.138:8000  \ 
+  --remote-endpoint=10.130.8.139:8000 \
+  --local-endpoint=10.130.8.138:8000  \
   --device-name="mlx5_bond_0"         \
   --mode initiator                    \
   --block-size=16384                  \
@@ -101,17 +102,25 @@ cmake -DBUILD_BENCH=ON -DBUILD_PYTHON=ON ..; make
 
 ### Cross node performance
 
-- H800 with NIC ("mlx5_bond_0"), RoCE v2.
+### Single Device
 
-| Batch Size | Block Size (Bytes) | Total Trips | Total Transferred (MiB) | Duration (s) | Average Latency (ms/trip) | Throughput (MiB/s) |
-|-----------|-------------------|-------------|-------------------------|-------------|---------------------------|--------------------|
-| 160       | 8,192             | 59,391      | 74,238                  | 10.0001     | 0.168377                  | 7,423.8            |
-| 160       | 16,384            | 51,144      | 127,860                 | 10.0002     | 0.195530                  | 12,785.8           |
-| 160       | 32,768            | 36,614      | 183,070                 | 10.0002     | 0.273124                  | 18,306.7           |
-| 160       | 65,536            | 21,021      | 210,210                 | 10.0003     | 0.475729                  | 21,020.4           |
-| 160       | 128,000           | 11,419      | 223,027                 | 10.0006     | 0.875789                  | 22,301.3           |
-| 160       | 256,000           | 5,839       | 228,085                 | 10.0015     | 1.712880                  | 22,805.2           |
-| 160       | 512,000           | 2,956       | 230,937                 | 10.0010     | 3.383300                  | 23,091.3           |
-| 160       | 1,024,000         | 1,486       | 232,187                 | 10.0006     | 6.729860                  | 23,217.4           |
-| 160       | 2,048,000         | 742         | 231,875                 | 10.0010     | 13.478400                 | 23,185.2           |
+- NVIDIA ConnectX-7 HHHL Adapter Card; 200GbE (default mode) / NDR200 IB; Dual-port QSFP112; PCIe 5.0 x16 with x16 PCIe extension option;
+- RoCE v2.
 
+| Block Size | Batch Size | Total Trips | Total Transferred (MiB) | Duration (seconds) | Average Latency (ms/trip) | Throughput (MiB/s) |
+| ---------- | ---------- | ----------- | ----------------------- | ------------------ | ------------------------- | ------------------ |
+| 8192       | 160        | 249920      | 312400                  | 10.0006            | 0.0400154                 | 31238              |
+| 16384      | 160        | 153300      | 383250                  | 10.0012            | 0.0652392                 | 38320.5            |
+| 32768      | 160        | 85280       | 426400                  | 10.0013            | 0.117276                  | 42634.4            |
+| 65536      | 160        | 44680       | 446800                  | 10.0033            | 0.223887                  | 44665.3            |
+| 128000     | 160        | 23340       | 455859                  | 10.0023            | 0.428546                  | 45575.6            |
+| 128000     | 160        | 23340       | 455859                  | 10.0028            | 0.428571                  | 45573              |
+| 256000     | 160        | 11820       | 461718                  | 10.0135            | 0.847166                  | 46109.6            |
+| 512000     | 160        | 5940        | 464062                  | 10.002             | 1.68384                   | 46396.8            |
+| 1024000    | 160        | 2980        | 465625                  | 10.0049            | 3.35735                   | 46539.6            |
+| 2048000    | 160        | 1500        | 468750                  | 10.0555            | 6.70364                   | 46616.5            |
+
+### Aggregated Transfer
+
+- NVIDIA ConnectX-7 HHHL Adapter Card * 8
+- RoCE v2

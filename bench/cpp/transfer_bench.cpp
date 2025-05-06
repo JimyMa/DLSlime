@@ -1,6 +1,7 @@
 #include "engine/assignment.h"
+#include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_transport.h"
+#include "engine/rdma/rdma_context.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
 
@@ -13,7 +14,6 @@
 #include <stdexcept>
 #include <string>
 #include <sys/time.h>
-#include <thread>
 #include <unistd.h>
 #include <unordered_map>
 #include <zmq.h>
@@ -24,22 +24,22 @@
 using json = nlohmann::json;
 using namespace slime;
 
-#define TERMINATE 0
-
 DEFINE_string(mode, "target", "initiator or target");
 
 DEFINE_string(device_name, "mlx5_bond_0", "device name");
 DEFINE_uint32(ib_port, 1, "device name");
 DEFINE_string(link_type, "RoCE", "IB or RoCE");
 
-DEFINE_string(local_endpoint, "", "local endpoint");
-DEFINE_string(remote_endpoint, "", "remote endpoint");
+DEFINE_string(initiator_endpoint, "", "initiator endpoint");
+DEFINE_string(target_endpoint, "", "target endpoint");
 
-DEFINE_uint64(buffer_size, (1ull << 30) + 1, "total size of data buffer");
+DEFINE_uint64(buffer_size, (10ull << 30) + 1, "total size of data buffer");
 DEFINE_uint64(block_size, 2048000, "block size");
 DEFINE_uint64(batch_size, 160, "batch size");
 
 DEFINE_uint64(duration, 10, "duration (s)");
+
+DEFINE_uint64(concurrent_num, 20, "max concurrent rdma assignment");
 
 json mr_info;
 
@@ -54,7 +54,7 @@ void* memory_allocate_initiator()
 void* memory_allocate_target()
 {
     SLIME_ASSERT(FLAGS_buffer_size > FLAGS_batch_size * FLAGS_block_size, "buffer_size < batch_size * block_size");
-    void* data = (void*)malloc(FLAGS_buffer_size);
+    void* data      = (void*)malloc(FLAGS_buffer_size);
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < FLAGS_buffer_size; ++i) {
         byte_data[i] = i % 128;
@@ -62,11 +62,12 @@ void* memory_allocate_target()
     return data;
 }
 
-bool checkInitiatorCopied(void* data) {
+bool checkInitiatorCopied(void* data)
+{
     char* byte_data = (char*)data;
     for (int64_t i = 0; i < (FLAGS_batch_size * FLAGS_block_size); ++i) {
         if (byte_data[i] != i % 128) {
-            SLIME_ASSERT(false, "Transfered data at i = " << i << " not same.");
+            SLIME_ASSERT(false, "Transferred data at i = " << i << " not same.");
             return false;
         }
     }
@@ -75,7 +76,7 @@ bool checkInitiatorCopied(void* data) {
 
 int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
 {
-    json local_info = rdma_context.local_info();
+    json local_info = rdma_context.endpoint_info();
 
     zmq::message_t local_msg(local_info.dump());
     send.send(local_msg, zmq::send_flags::none);
@@ -85,12 +86,7 @@ int connect(RDMAContext& rdma_context, zmq::socket_t& send, zmq::socket_t& recv)
     std::string remote_msg_str(static_cast<const char*>(remote_msg.data()), remote_msg.size());
 
     json remote_info = json::parse(remote_msg_str);
-
-    rdma_context.connect_to(RDMAInfo(remote_info["rdma_info"]));
-    for (auto& item : remote_info["mr_info"].items()) {
-        rdma_context.register_remote_memory_region(item.key(), item.value());
-    }
-
+    rdma_context.connect(remote_info);
     return 0;
 }
 
@@ -100,8 +96,8 @@ int target(RDMAContext& rdma_context)
     zmq::socket_t  send(context, ZMQ_PUSH);
     zmq::socket_t  recv(context, ZMQ_PULL);
 
-    send.connect("tcp://" + FLAGS_remote_endpoint);
-    recv.bind("tcp://" + FLAGS_local_endpoint);
+    send.connect("tcp://" + FLAGS_initiator_endpoint);
+    recv.bind("tcp://" + FLAGS_target_endpoint);
 
     rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
@@ -124,8 +120,8 @@ int initiator(RDMAContext& rdma_context)
     zmq::socket_t  send(context, ZMQ_PUSH);
     zmq::socket_t  recv(context, ZMQ_PULL);
 
-    send.connect("tcp://" + FLAGS_remote_endpoint);
-    recv.bind("tcp://" + FLAGS_local_endpoint);
+    send.connect("tcp://" + FLAGS_target_endpoint);
+    recv.bind("tcp://" + FLAGS_initiator_endpoint);
 
     rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
@@ -136,7 +132,6 @@ int initiator(RDMAContext& rdma_context)
 
     rdma_context.launch_future();
 
-    // 新增变量：统计相关
     uint64_t total_bytes = 0;
     uint64_t total_trips = 0;
     size_t   step        = 0;
@@ -153,14 +148,21 @@ int initiator(RDMAContext& rdma_context)
         }
 
         int done = false;
-        rdma_context.submit(
-            Assignment(OpCode::READ, "buffer", target_offsets, source_offsets, FLAGS_block_size, [&done](int code) {
-                done = true;
-            }));
 
-        while (!done) {}
-        total_bytes += FLAGS_batch_size * FLAGS_block_size;
-        total_trips += 1;
+        std::vector<RDMAAssignmentSharedPtr> rdma_assignment_batch;
+        for (int concurrent_id = 0; concurrent_id < FLAGS_concurrent_num; ++concurrent_id) {
+            AssignmentBatch batch;
+            for (int i = 0; i < FLAGS_batch_size; ++i) {
+                batch.push_back(Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size));
+            }
+            RDMAAssignmentSharedPtr rdma_assignment = rdma_context.submit(OpCode::READ, batch);
+            rdma_assignment_batch.emplace_back(rdma_assignment);
+            total_bytes += FLAGS_batch_size * FLAGS_block_size;
+            total_trips += 1;
+        }
+        for (RDMAAssignmentSharedPtr& rdma_assignment : rdma_assignment_batch) {
+            rdma_assignment->wait();
+        }
     }
 
     auto   end_time   = std::chrono::steady_clock::now();
@@ -181,7 +183,7 @@ int initiator(RDMAContext& rdma_context)
 
     rdma_context.stop_future();
 
-    SLIME_ASSERT(checkInitiatorCopied(data), "Transfered data not equal!");
+    SLIME_ASSERT(checkInitiatorCopied(data), "Transferred data not equal!");
 
     return 0;
 }
@@ -189,6 +191,7 @@ int initiator(RDMAContext& rdma_context)
 int main(int argc, char** argv)
 {
     gflags::ParseCommandLineFlags(&argc, &argv, false);
+    std::cout << "benchmark begin" << std::endl;
     RDMAContext context;
     if (FLAGS_mode == "initiator") {
         return initiator(context);

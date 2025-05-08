@@ -143,6 +143,14 @@ private:
     size_t            qp_list_len_{4};
     qp_management_t** qp_management_;
 
+    int last_qp_selection_ = -1;
+    int select_qpi()
+    {
+        // Simplest round robin, we could enrich it in the future
+        last_qp_selection_ = (last_qp_selection_ + 1) % qp_list_len_;
+        return last_qp_selection_;
+    }
+
     typedef struct cq_management {
         // TODO: multi cq handlers.
     } cq_management_t;
@@ -154,8 +162,6 @@ private:
     /* async cq handler */
     std::future<void> cq_future_;
     std::atomic<bool> stop_cq_future_{false};
-
-    int last_rdma_selection_ = -1;
 
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
@@ -169,12 +175,6 @@ private:
     /* Async RDMA Read */
     int64_t post_read_batch(int qpi, RDMAAssignmentSharedPtr assign);
 
-    int selectRdma()
-    {
-        // Simplest round robin, we could enrich it in the future
-        last_rdma_selection_ = (last_rdma_selection_ + 1) % qp_list_len_;
-        return last_rdma_selection_;
-    }
 };
 
 }  // namespace slime

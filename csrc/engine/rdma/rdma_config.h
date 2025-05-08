@@ -18,7 +18,6 @@ const static int MAX_RECV_WR = 8192;
 const static int POLL_COUNT = 256;
 
 using json = nlohmann::json;
-
 typedef struct rdma_info {
     uint32_t      qpn;
     union ibv_gid gid;

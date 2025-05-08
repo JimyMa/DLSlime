@@ -119,8 +119,3 @@ cmake -DBUILD_BENCH=ON -DBUILD_PYTHON=ON ..; make
 | 512000     | 160        | 5940        | 464062                  | 10.002             | 1.68384                   | 46396.8            |
 | 1024000    | 160        | 2980        | 465625                  | 10.0049            | 3.35735                   | 46539.6            |
 | 2048000    | 160        | 1500        | 468750                  | 10.0555            | 6.70364                   | 46616.5            |
-
-### Aggregated Transfer
-
-- NVIDIA ConnectX-7 HHHL Adapter Card * 8
-- RoCE v2

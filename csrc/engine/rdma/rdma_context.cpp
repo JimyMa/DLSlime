@@ -8,6 +8,7 @@
 #include "utils/logging.h"
 #include "utils/utils.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -26,6 +27,14 @@
 namespace slime {
 
 typedef struct callback_info_with_qpi {
+    typedef enum: int {
+        SUCCESS                   = 0,
+        ASSIGNMENT_BATCH_OVERFLOW = 400,
+        UNKNOWN_OPCODE            = 401,
+        TIME_OUT                  = 402,
+        FAILED                    = 403,
+    } CALLBACK_STATUS;
+
     callback_info_t* callback_info_;
     int              qpi_;
 } callback_info_with_qpi_t;
@@ -317,12 +326,32 @@ void RDMAContext::stop_future()
 
 RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
-    int                          qpi = selectRdma();
-    std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
-    RDMAAssignmentSharedPtr      rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch, callback);
-    qp_management_[qpi]->assign_queue_.push(rdma_assignment);
-    qp_management_[qpi]->has_runnable_event_.notify_one();
-    return rdma_assignment;
+    std::vector<AssignmentBatch> batch_split;
+
+    auto split = [&]() {
+        int split_step = MAX_SEND_WR / 2;
+        for (int i = 0; i < batch.size(); i += split_step) {
+            batch_split.push_back(
+                AssignmentBatch(batch.begin() + i, std::min(batch.end(), batch.begin() + i + split_step)));
+        }
+    };
+    split();
+
+    int qpi        = select_qpi();
+    int split_size = batch_split.size();
+
+    {
+        std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
+        RDMAAssignmentSharedPtr      rdma_assignment;
+        for (int i = 0; i < split_size; ++i) {
+            callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int) { return 0; });
+            rdma_assignment              = std::make_shared<RDMAAssignment>(opcode, batch_split[i], split_callback);
+            qp_management_[qpi]->assign_queue_.push(rdma_assignment);
+        }
+
+        qp_management_[qpi]->has_runnable_event_.notify_one();
+        return rdma_assignment;
+    }
 }
 
 int64_t RDMAContext::post_send(int qpi, RDMAAssignmentSharedPtr assign)
@@ -479,14 +508,10 @@ int64_t RDMAContext::cq_poll_handle()
                 continue;
             }
             for (size_t i = 0; i < nr_poll; ++i) {
-                int64_t status_code;
-                if (wc[i].status == IBV_WC_SUCCESS) {
-                    SLIME_LOG_INFO("WR completed successfully.");
-                    status_code = 200;
-                }
-                else {
+                callback_info_with_qpi_t::CALLBACK_STATUS status_code = callback_info_with_qpi_t::SUCCESS;
+                if (wc[i].status != IBV_WC_SUCCESS) {
+                    status_code = callback_info_with_qpi_t::FAILED;
                     SLIME_LOG_ERROR("WR failed with status: ", ibv_wc_status_str(wc[i].status), std::endl);
-                    status_code = wc[i].status;
                 }
                 if (wc[i].wr_id != 0) {
                     callback_info_with_qpi_t* callback_with_qpi =
@@ -536,7 +561,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
             if (batch_size > MAX_SEND_WR) {
                 SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SEND WR(" << MAX_SEND_WR
                                               << "), this request will be ignored");
-                front_assign->callback_info_->callback_(500);
+                front_assign->callback_info_->callback_(callback_info_with_qpi_t::ASSIGNMENT_BATCH_OVERFLOW);
                 qp_management_[qpi]->assign_queue_.pop();
             }
             else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < MAX_SEND_WR) {
@@ -552,7 +577,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         break;
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");
-                        front_assign->callback_info_->callback_(500);
+                        front_assign->callback_info_->callback_(callback_info_with_qpi_t::UNKNOWN_OPCODE);
                 }
                 qp_management_[qpi]->assign_queue_.pop();
             }

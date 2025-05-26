@@ -2,4 +2,4 @@
 
 A Peer to Peer RDMA Transfer Engine.
 
-Move to: github.com/DeepLink-org/DLSlime.git
+Move to [DeepLink-org/DLSlime](https://github.com/DeepLink-org/DLSlime.git)

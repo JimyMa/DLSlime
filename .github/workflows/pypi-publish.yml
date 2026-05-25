@@ -56,6 +56,37 @@ jobs:
             CMAKE_ARGS=-DBUILD_RDMA=ON -DBUILD_PYTHON=ON
             -DBUILD_NVLINK=OFF -DBUILD_TORCH_PLUGIN=OFF
             -DBUILD_ASCEND_DIRECT=OFF -DBUILD_TEST=OFF
+          # Don't try to bundle libibverbs / libnuma into the wheel:
+          # they're system-level libraries (provided by the rdma-core / numactl
+          # packages on the user's host) and are NOT in the manylinux policy
+          # whitelist, so auditwheel would otherwise fail with
+          # `auditwheel repair ... failed with code 1`.
+          # auditwheel must skip two classes of libraries:
+          #   1. System RDMA / NUMA stack — provided by the user's rdma-core
+          #      install, NOT in the manylinux policy allowlist, must not be
+          #      vendored or wheels would conflict with host kernel modules.
+          #   2. DLSlime's own sibling shared libs (lib_slime_rdma.so,
+          #      lib_slime_obs.so) — they're already installed next to
+          #      _slime_c.so inside the wheel and resolved at runtime via the
+          #      $ORIGIN rpath baked in by CMake. auditwheel doesn't know how to
+          #      look "inside the wheel" so we tell it to leave them alone.
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >-
+            auditwheel repair
+            --exclude libibverbs.so.1
+            --exclude libnuma.so.1
+            --exclude libmlx5.so.1
+            --exclude libmlx4.so.1
+            --exclude librdmacm.so.1
+            --exclude libibumad.so.3
+            --exclude libefa.so.1
+            --exclude lib_slime_topology.so
+            --exclude lib_slime_engine.so
+            --exclude lib_slime_device.so
+            --exclude lib_slime_obs.so
+            --exclude lib_slime_rdma.so
+            --exclude lib_slime_nvlink.so
+            --exclude libascend_direct.so
+            -w {dest_dir} {wheel}
         with:
           package-dir: dlslime
           output-dir: dist

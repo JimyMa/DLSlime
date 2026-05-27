@@ -200,6 +200,7 @@ class PeerAgent:
 
         # Build Redis key prefix from scope parameter
         self._redis_key_prefix = scope or ""
+        self._session_started_at = time.time()
 
         # NanoCtrl HTTP client
         self._client = NanoCtrlClient(ctrl_url, scope=self._redis_key_prefix or None)
@@ -670,6 +671,7 @@ class PeerAgent:
         patterns = [
             f"{prefix}exchange:{self.alias}:*",
             f"{prefix}exchange:*:{self.alias}",
+            f"{prefix}exchange:*:{self.alias}:*",
         ]
         try:
             keys_to_delete: list[str] = []

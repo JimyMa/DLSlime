@@ -63,10 +63,10 @@ class StreamMailbox:
         # so losing the message stalls the handshake forever.
         #
         # Instead, _listen_loop reads from "0-0" and processes every message
-        # on the stream. Truly stale messages from a prior crashed session
-        # with the same alias fail endpoint.connect at handshake time — the
-        # listen loop catches that and continues, so later in-flight qp_ready
-        # from the current peer session still completes the handshake.
+        # on the stream. Stale messages must be removed when the previous
+        # agent incarnation is cleaned up. Do not use local wall-clock
+        # timestamps here: a valid early qp_ready can predate this listener,
+        # and sender/receiver clocks may drift across nodes.
         self._thread = threading.Thread(target=self._listen_loop, daemon=True)
         self._thread.start()
         logger.info(
@@ -316,7 +316,6 @@ class StreamMailbox:
                         "peer": self._agent.alias,
                         "qp_info": json.dumps(my_qp_info, default=str),
                         "conn_meta": json.dumps(my_conn_meta, default=str),
-                        "timestamp": str(time.time()),
                     },
                     maxlen=1000,
                     approximate=True,

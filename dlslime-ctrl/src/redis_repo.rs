@@ -283,7 +283,14 @@ impl RedisRepo {
             }
         }
 
-        // 5. Delete inbox
+        // 5. Delete mailbox streams/inbox
+        let stream_key = self.scoped_key(scope, &["stream", agent_name]);
+        redis::cmd("DEL")
+            .arg(&stream_key)
+            .query_async::<()>(&mut *conn)
+            .await
+            .ok();
+
         let inbox_key = self.scoped_key(scope, &["inbox", agent_name]);
         redis::cmd("DEL")
             .arg(&inbox_key)

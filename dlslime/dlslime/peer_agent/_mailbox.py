@@ -148,6 +148,15 @@ class StreamMailbox:
 
     def _handle_message(self, fields: Dict[str, str]) -> None:
         """Handle incoming stream message."""
+        if self._is_stale_message(fields):
+            logger.info(
+                "StreamMailbox %s: Ignoring stale %s from %s",
+                self._agent.alias,
+                fields.get("type"),
+                fields.get("peer"),
+            )
+            return
+
         msg_type = fields.get("type")
 
         if msg_type == "connect_peer":
@@ -222,6 +231,18 @@ class StreamMailbox:
                 self._agent.alias,
                 msg_type,
             )
+
+    def _is_stale_message(self, fields: Dict[str, str]) -> bool:
+        raw_timestamp = fields.get("timestamp")
+        if raw_timestamp is None:
+            return False
+        if isinstance(raw_timestamp, bytes):
+            raw_timestamp = raw_timestamp.decode("utf-8", errors="replace")
+        try:
+            timestamp = float(raw_timestamp)
+        except (TypeError, ValueError):
+            return False
+        return timestamp < getattr(self._agent, "_session_started_at", 0.0)
 
     def _try_connect_peer(
         self,

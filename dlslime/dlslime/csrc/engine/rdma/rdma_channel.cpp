@@ -155,7 +155,7 @@ int32_t RDMAChannel::modify_qp_to_r2r()
 
         if (local_rdma_info_[qpi].gidx == -1) {
             // IB
-            attr.ah_attr.dlid = local_rdma_info_[qpi].lid;
+            attr.ah_attr.dlid = remote_rdma_info_[qpi].lid;
         }
         else {
             // RoCE v2

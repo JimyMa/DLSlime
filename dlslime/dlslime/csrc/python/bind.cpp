@@ -187,6 +187,25 @@ PYBIND11_MODULE(_slime_c, m)
             py::arg("data_ptr"),
             py::arg("length"),
             py::arg("name") = py::none())
+        .def(
+            "register_dmabuf_memory_region",
+            [](dlslime::RDMAMemoryPool& self,
+               int                      fd,
+               uint64_t                 offset,
+               uint64_t                 length,
+               uint64_t                 iova,
+               py::object               name_obj) {
+                std::optional<std::string> name = std::nullopt;
+                if (!name_obj.is_none()) {
+                    name = name_obj.cast<std::string>();
+                }
+                return self.registerDmaBufMemoryRegion(fd, offset, length, iova, name);
+            },
+            py::arg("fd"),
+            py::arg("offset"),
+            py::arg("length"),
+            py::arg("iova"),
+            py::arg("name") = py::none())
         .def("get_handle",
              static_cast<int32_t (dlslime::RDMAMemoryPool::*)(const std::string&)>(
                  &dlslime::RDMAMemoryPool::get_mr_handle))

@@ -120,6 +120,9 @@ class LogicalMemoryRegion:
     ptr: int
     offset: int
     length: int
+    dmabuf_fd: Optional[int] = None
+    iova: Optional[int] = None
+    owns_fd: bool = False
 
 
 @dataclass
@@ -1116,6 +1119,8 @@ class PeerAgent:
             initial_regions = list(self._logical_regions.values())
         replayed: Set[str] = set()
         for region in initial_regions:
+            if region.dmabuf_fd is not None:
+                continue
             try:
                 new_ep.register_memory_region(
                     region.name, region.ptr, region.offset, region.length
@@ -1153,6 +1158,8 @@ class PeerAgent:
             post_regions = list(self._logical_regions.values())
         for region in post_regions:
             if region.name in replayed:
+                continue
+            if region.dmabuf_fd is not None:
                 continue
             try:
                 new_ep.register_memory_region(
@@ -1440,6 +1447,62 @@ class PeerAgent:
         self._publish_memory_keys()
         return materialized.handler
 
+    def register_dmabuf_memory_region(
+        self,
+        mr_name: str,
+        fd: int,
+        offset: int,
+        length: int,
+        iova: int,
+    ) -> int:
+        """Register a DMA-BUF backed logical region without importing CUDA.
+
+        The caller retains ownership of ``fd``. PeerAgent duplicates it and
+        keeps the duplicate alive until the region is unregistered or the
+        agent shuts down, allowing lazy materialization for additional RDMA
+        protection domains. DMA-BUF regions are RDMA-only and cannot be
+        replayed onto TCP endpoints.
+        """
+        if not mr_name:
+            raise ValueError("mr_name must not be empty")
+        if fd < 0:
+            raise ValueError("dma-buf fd must be non-negative")
+        if offset < 0 or length <= 0 or iova < 0:
+            raise ValueError("offset/iova must be non-negative and length positive")
+
+        owned_fd = os.dup(fd)
+        region = LogicalMemoryRegion(
+            mr_name,
+            0,
+            offset,
+            length,
+            dmabuf_fd=owned_fd,
+            iova=iova,
+            owns_fd=True,
+        )
+        try:
+            with self._regions_lock:
+                if mr_name in self._logical_regions:
+                    raise ValueError(f"Memory region {mr_name!r} is already registered")
+                self._logical_regions[mr_name] = region
+
+            key = self._default_local_resource_key()
+            if isinstance(key, TcpResourceKey):
+                raise RuntimeError(
+                    "DMA-BUF memory regions require an RDMA resource; "
+                    "the agent is currently TCP-only"
+                )
+
+            materialized = self._materialize_region(mr_name, key)
+            self._publish_memory_keys()
+            return materialized.handler
+        except Exception:
+            with self._regions_lock:
+                if self._logical_regions.get(mr_name) is region:
+                    self._logical_regions.pop(mr_name, None)
+            os.close(owned_fd)
+            raise
+
     def _default_local_resource_key(self) -> ResourceKey:
         with self._connections_lock:
             if self._connections:
@@ -1489,6 +1552,7 @@ class PeerAgent:
         """
         with self._regions_lock:
             had_logical = mr_name in self._logical_regions
+            logical_region = self._logical_regions.get(mr_name)
             materialized = [
                 region
                 for key, region in self._materialized_regions.items()
@@ -1521,6 +1585,13 @@ class PeerAgent:
             self._logical_regions.pop(mr_name, None)
             for region in materialized:
                 self._materialized_regions.pop((mr_name, region.resource_key), None)
+
+        if (
+            logical_region is not None
+            and logical_region.owns_fd
+            and logical_region.dmabuf_fd is not None
+        ):
+            os.close(logical_region.dmabuf_fd)
 
         if self._redis_client is not None and self.alias:
             prefix = self._redis_prefix()
@@ -1571,9 +1642,20 @@ class PeerAgent:
                 raise RuntimeError(f"Local memory region '{mr_name}' is not registered")
 
         _, pool = self._get_context_and_pool(key)
-        handler = pool.register_memory_region(
-            region.ptr, region.length + region.offset, mr_name
-        )
+        if region.dmabuf_fd is not None:
+            if region.iova is None:
+                raise RuntimeError(f"DMA-BUF region {mr_name!r} has no IOVA")
+            handler = pool.register_dmabuf_memory_region(
+                region.dmabuf_fd,
+                region.offset,
+                region.length,
+                region.iova,
+                mr_name,
+            )
+        else:
+            handler = pool.register_memory_region(
+                region.ptr, region.length + region.offset, mr_name
+            )
         mr_info = pool.mr_info()[mr_name]
 
         # Write directly to Redis (p2p, no HTTP)
@@ -2063,6 +2145,17 @@ class PeerAgent:
             logger.info("PeerAgent %s: Cleanup OK", self.alias)
         except Exception as e:
             logger.warning("PeerAgent %s: Cleanup API warning: %s", self.alias, e)
+
+        with self._regions_lock:
+            owned_dmabuf_fds = [
+                region.dmabuf_fd
+                for region in self._logical_regions.values()
+                if region.owns_fd and region.dmabuf_fd is not None
+            ]
+            for region in self._logical_regions.values():
+                region.owns_fd = False
+        for fd in owned_dmabuf_fds:
+            os.close(fd)
 
         logger.info("PeerAgent %s: Shutdown complete", self.alias)
 

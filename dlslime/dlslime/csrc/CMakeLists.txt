@@ -1,6 +1,7 @@
 add_subdirectory(observability)
 add_subdirectory(device)
 add_subdirectory(engine)
+add_subdirectory(topology)
 
 add_library(
     _slime_topology
@@ -17,8 +18,15 @@ set_target_properties(
 
 target_include_directories(_slime_topology PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
-    $<INSTALL_INTERFACE:include/dlslime>
+    $<INSTALL_INTERFACE:include>
 )
+
+target_link_libraries(_slime_topology PUBLIC _slime_topo_core)
+
+if(BUILD_TOPO_SYSFS)
+    target_compile_definitions(_slime_topology PRIVATE SLIME_TOPO_HAS_SYSFS)
+    target_link_libraries(_slime_topology PUBLIC _slime_topo_sysfs)
+endif()
 
 add_library(dlslime INTERFACE)
 target_link_libraries(dlslime INTERFACE _slime_engine _slime_device _slime_topology _slime_obs)

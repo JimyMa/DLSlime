@@ -1,0 +1,3 @@
+add_executable(topology_core_test topology_core_test.cpp)
+target_link_libraries(topology_core_test PRIVATE DLSlime::topo_core)
+add_test(NAME topology_core_test COMMAND topology_core_test)

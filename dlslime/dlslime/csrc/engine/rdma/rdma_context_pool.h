@@ -21,43 +21,44 @@ public:
     }
 
     std::shared_ptr<RDMAContext>
-    get_context(const std::string& dev_name = "", uint8_t ib_port = 1, const std::string& link_type = "auto")
+    get_context(const std::string& dev_name = "", int32_t ib_port = 1, const std::string& link_type = "auto")
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        std::string key  = dev_name;
-        auto        nics = available_nic();
+        auto nics = available_nic();
         if (nics.empty()) {
-            SLIME_LOG_WARN("No Available nics");
-            return nullptr;
+            throw std::runtime_error("No available RDMA devices");
         }
-        if (std::find(nics.begin(), nics.end(), key) == nics.end() or dev_name.empty()) {
-            key = nics[0];
+        if (ib_port < 1 || ib_port > 255) {
+            throw std::invalid_argument("RDMA port must be in range 1..255, got " + std::to_string(ib_port));
         }
 
-        // Contexts are bound to a physical port. Retaining the requested mode
-        // in the key also ensures a bad explicit override is validated rather
-        // than silently reusing a context created through automatic detection.
-        const std::string context_key = key + ":" + std::to_string(ib_port) + ":" + link_type;
+        std::string device = dev_name.empty() ? nics[0] : dev_name;
+        if (std::find(nics.begin(), nics.end(), device) == nics.end()) {
+            throw std::invalid_argument("RDMA device '" + device + "' is not available");
+        }
 
-        if (contexts_.find(context_key) == contexts_.end()) {
-            SLIME_LOG_INFO("Initializing new RDMAContext for device: ", key);
-
-            auto context = std::make_shared<RDMAContext>();
-
-            if (context->init(key, ib_port, link_type) != 0) {
-                SLIME_LOG_ERROR("Failed to init RDMAContext for {}", key);
-                return nullptr;
+        const RdmaLinkType requested_type = parseRdmaLinkType(link_type);
+        const std::string  context_key    = device + ":" + std::to_string(ib_port);
+        auto               existing       = contexts_.find(context_key);
+        if (existing != contexts_.end()) {
+            if (requested_type != RdmaLinkType::Auto && requested_type != existing->second->link_type()) {
+                throw std::invalid_argument("Requested RDMA link type " + std::string(rdmaLinkTypeName(requested_type))
+                                            + " does not match cached context link type "
+                                            + rdmaLinkTypeName(existing->second->link_type()));
             }
-
-            contexts_[context_key] = context;
-
-            if (!default_context_) {
-                default_context_ = context;
-            }
+            return existing->second;
         }
 
-        return contexts_[context_key];
+        SLIME_LOG_INFO("Initializing new RDMAContext for device: ", device);
+        auto context = std::make_shared<RDMAContext>();
+        context->init(device, static_cast<uint8_t>(ib_port), rdmaLinkTypeName(requested_type));
+        contexts_[context_key] = context;
+
+        if (!default_context_) {
+            default_context_ = context;
+        }
+        return context;
     }
 
     std::shared_ptr<RDMAContext> get_default_context()

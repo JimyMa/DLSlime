@@ -17,6 +17,17 @@ class RDMAChannel;
 
 using json = nlohmann::json;
 
+enum class RdmaLinkType {
+    Auto,
+    InfiniBand,
+    RoCE,
+};
+
+RdmaLinkType parseRdmaLinkType(const std::string& value);
+RdmaLinkType detectRdmaLinkType(uint8_t link_layer);
+RdmaLinkType resolveRdmaLinkType(const std::string& requested, uint8_t detected_link_layer);
+const char*  rdmaLinkTypeName(RdmaLinkType link_type);
+
 class RDMAContext: public std::enable_shared_from_this<RDMAContext> {
 
     friend class RDMAChannel;
@@ -39,6 +50,11 @@ public:
 
     void launch_future();
     void stop_future();
+
+    RdmaLinkType link_type() const
+    {
+        return link_type_;
+    }
 
     std::string get_dev_ib() const
     {
@@ -63,6 +79,7 @@ private:
     struct ibv_comp_channel* comp_channel_ = nullptr;
     struct ibv_cq*           cq_           = nullptr;
     uint8_t                  ib_port_      = -1;
+    RdmaLinkType             link_type_    = RdmaLinkType::Auto;
     size_t                   max_num_inline_data_{0};
     uint16_t                 lid_;
     enum ibv_mtu             active_mtu_;

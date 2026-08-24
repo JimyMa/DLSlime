@@ -188,12 +188,11 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     size_t                   idx               = rank_ % available_devices.size();
 
     // TODO: maybe we need a structure to transfer the RDMA device info
-    const std::string dev_name  = available_devices[idx];
-    const std::string link_type = "RoCE";
-    uint8_t           ib_port   = 1;
-    size_t            qp_num    = SLIME_QP_NUM;
+    const std::string dev_name = available_devices[idx];
+    uint8_t           ib_port  = 1;
+    size_t            qp_num   = SLIME_QP_NUM;
 
-    std::shared_ptr<RDMAContext> context = GlobalContextManager::instance().get_context(dev_name, ib_port, link_type);
+    std::shared_ptr<RDMAContext> context = GlobalContextManager::instance().get_context(dev_name, ib_port, "auto");
     if (not context)
         SLIME_ABORT("No Available RNICs");
     rdma_worker_ = GlobalWorkerManager::instance().get_default_worker(socketId(dev_name));

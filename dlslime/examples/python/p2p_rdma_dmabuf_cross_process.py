@@ -246,7 +246,7 @@ def main() -> int:
     parser.add_argument(
         "--link-type",
         default="auto",
-        help="RDMA link type override (auto, IB, or RoCE; default: auto)",
+        help="Optional compatibility/diagnostic override; normally leave as auto",
     )
     parser.add_argument("--bytes", type=int, default=16 * 1024 * 1024)
     args = parser.parse_args()

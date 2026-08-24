@@ -32,17 +32,22 @@ from dlslime import RDMAEndpoint, available_nic
 devices = available_nic()
 assert devices, "No RDMA devices available"
 
-initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="RoCE")
-target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
+initiator = RDMAEndpoint(device_name=devices[0], ib_port=1)
+target = RDMAEndpoint(device_name=devices[-1], ib_port=1)
 ```
 
 Constructor forms:
 
 ```python
-RDMAEndpoint(device_name="", ib_port=1, link_type="RoCE", num_qp=1, worker=None)
+RDMAEndpoint(device_name="", ib_port=1, link_type="auto", num_qp=1, worker=None)
 RDMAEndpoint(context, num_qp=1, worker=None)
 RDMAEndpoint(pool, num_qp=1, worker=None)
 ```
+
+By default, DLSlime inspects the selected verbs port and detects native
+InfiniBand versus Ethernet/RoCE automatically. Explicit `link_type="IB"` or
+`link_type="RoCE"` values remain available as compatibility and diagnostic
+overrides; a value that conflicts with the hardware raises an error.
 
 Use `available_nic()` to inspect usable RDMA devices and `socket_id(device)` to
 map a NIC to its NUMA socket when building worker placement.

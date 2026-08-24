@@ -23,8 +23,8 @@ bring-up、微基准、显式双进程测试，以及已经有独立控制面的
 from dlslime import RDMAEndpoint, available_nic
 
 devices = available_nic()
-initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="RoCE")
-target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
+initiator = RDMAEndpoint(device_name=devices[0], ib_port=1)
+target = RDMAEndpoint(device_name=devices[-1], ib_port=1)
 
 local_handle = initiator.register_memory_region(
     "kv", local_tensor.data_ptr(), int(local_tensor.storage_offset()), local_tensor.numel()
@@ -43,6 +43,10 @@ initiator.connect(target.endpoint_info())
 future = initiator.read([(local_handle, remote_handle, 0, 8, 8)], None)
 future.wait()
 ```
+
+DLSlime 默认检查所选 verbs 端口并自动识别原生 InfiniBand 或 Ethernet/RoCE。
+仍可显式指定 `link_type="IB"` 或 `link_type="RoCE"` 作为兼容或诊断 override；
+如果指定值与硬件不一致，构造过程会报错。
 
 Endpoint API 不规定元数据交换方式。示例里通常在同一进程内直接交换；真实部署中可以通过 TCP、
 Redis、调度器或已有服务注册系统完成。

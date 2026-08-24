@@ -25,8 +25,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     print(f"Tensor Device: {device_type.upper()}")
 
     # 初始化 Endpoint
-    send_endpoint = _slime_c.RDMAEndpoint(dev, 1, "RoCE", num_qp)
-    recv_endpoint = _slime_c.RDMAEndpoint(dev, 1, "RoCE", num_qp)
+    send_endpoint = _slime_c.RDMAEndpoint(device_name=dev, ib_port=1, num_qp=num_qp)
+    recv_endpoint = _slime_c.RDMAEndpoint(device_name=dev, ib_port=1, num_qp=num_qp)
 
     # 建立连接
     send_endpoint.connect(recv_endpoint.endpoint_info())

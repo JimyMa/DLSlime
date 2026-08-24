@@ -206,7 +206,7 @@ public:
 
     RDMAEndpoint(std::string                 dev_name  = "",
                  int32_t                     ib_port   = 1,
-                 std::string                 link_type = "RoCE",
+                 std::string                 link_type = "auto",
                  size_t                      num_qp    = 1,
                  std::shared_ptr<RDMAWorker> worker    = nullptr);
 

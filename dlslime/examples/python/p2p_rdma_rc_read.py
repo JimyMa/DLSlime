@@ -7,8 +7,8 @@ assert devices, "No RDMA devices."
 mr_key = "buffer"
 
 # Initialize RDMA endpoint
-initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="RoCE")
-target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
+initiator = RDMAEndpoint(device_name=devices[0], ib_port=1)
+target = RDMAEndpoint(device_name=devices[-1], ib_port=1)
 
 # Register local GPU memory with RDMA subsystem
 local_tensor = torch.zeros([16], device="cpu", dtype=torch.uint8)

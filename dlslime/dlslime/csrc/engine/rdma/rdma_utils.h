@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -69,6 +70,7 @@ inline std::vector<std::string> available_nic()
         SLIME_LOG_DEBUG("No RDMA devices");
         return {};
     }
+    std::unique_ptr<ibv_device*, decltype(&ibv_free_device_list)> device_list_guard(dev_list, &ibv_free_device_list);
 
     std::vector<std::string> available_devices;
     for (int i = 0; i < num_devices; ++i) {
@@ -89,14 +91,18 @@ inline int get_gid_index(std::string dev_name)
     dev_list = ibv_get_device_list(&num_devices);
     if (!dev_list) {
         SLIME_LOG_DEBUG("No RDMA devices");
-        return {};
+        return -1;
     }
+    std::unique_ptr<ibv_device*, decltype(&ibv_free_device_list)> device_list_guard(dev_list, &ibv_free_device_list);
 
     std::vector<std::string> available_devices;
     for (int i = 0; i < num_devices; ++i) {
         std::string dev_name_i = (char*)ibv_get_device_name(dev_list[i]);
         if (strcmp(dev_name_i.c_str(), dev_name.c_str()) == 0) {
             struct ibv_context* ib_ctx = ibv_open_device(dev_list[i]);
+            if (!ib_ctx) {
+                return -1;
+            }
             int gidx = ibv_find_sgid_type(ib_ctx, 1, ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V2, AF_INET);
             ibv_close_device(ib_ctx);
             return gidx;

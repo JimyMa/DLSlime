@@ -73,7 +73,7 @@ RDMAEndpoint::RDMAEndpoint(std::shared_ptr<RDMAMemoryPool> pool, size_t num_qp, 
     local_pool_(pool), num_qp_(num_qp)
 {
     if (!local_pool_) {
-        SLIME_ABORT("Memory Pool cannot be null");
+        throw std::invalid_argument("RDMA memory pool cannot be null");
     }
     ctx_ = local_pool_->context();
     init(worker);
@@ -83,7 +83,7 @@ RDMAEndpoint::RDMAEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp, std:
     ctx_(ctx), num_qp_(num_qp)
 {
     if (!ctx_) {
-        SLIME_ABORT("RDMA Context cannot be null");
+        throw std::invalid_argument("RDMA context cannot be null");
     }
     local_pool_ = std::make_shared<RDMAMemoryPool>(ctx);
     init(worker);

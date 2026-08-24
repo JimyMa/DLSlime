@@ -1,7 +1,8 @@
 import threading
 
 import pytest
-from dlslime import discover_topology
+from dlslime import RDMAContext, RDMAEndpoint, discover_topology
+from dlslime import _slime_c
 from dlslime.peer_agent import _agent as peer_agent_mod
 from dlslime.peer_agent._agent import DirectedConnection, PeerAgent, RdmaResourceKey
 
@@ -153,6 +154,76 @@ def test_discover_topology_prefers_requested_device_and_normalizes_sysfs(tmp_pat
     assert mlx5_1["health"] == "DEGRADED"
     assert mlx5_1["ports"][0]["link_type"] == "IB"
     assert mlx5_1["ports"][0]["state"] == "DOWN"
+
+
+def test_rdma_endpoint_defaults_to_automatic_link_type_detection():
+    init_doc = RDMAEndpoint.__init__.__doc__ or ""
+    assert "link_type: str = 'auto'" in init_doc
+
+
+def test_rdma_context_init_defaults_to_automatic_link_type_detection():
+    init_doc = RDMAContext.init.__doc__ or ""
+    assert "link_type: str = 'auto'" in init_doc
+
+
+@pytest.mark.parametrize(
+    "requested",
+    ["", "auto", "AUTO", "IB", "ib", "InfiniBand", "  InfiniBand  "],
+)
+def test_resolve_rdma_link_type_detects_infiniband(requested):
+    assert (
+        _slime_c._resolve_rdma_link_type(
+            requested, _slime_c._IBV_LINK_LAYER_INFINIBAND
+        )
+        == "IB"
+    )
+
+
+@pytest.mark.parametrize(
+    "requested",
+    [
+        "auto",
+        "RoCE",
+        "roce",
+        " RoCE ",
+        "Ethernet",
+        "RoCEv1",
+        "roce v1",
+        "RoCEv2",
+        "RoCE v2",
+    ],
+)
+def test_resolve_rdma_link_type_detects_roce(requested):
+    assert (
+        _slime_c._resolve_rdma_link_type(
+            requested, _slime_c._IBV_LINK_LAYER_ETHERNET
+        )
+        == "RoCE"
+    )
+
+
+@pytest.mark.parametrize(
+    ("requested", "detected"),
+    [
+        ("IB", "_IBV_LINK_LAYER_ETHERNET"),
+        ("RoCE", "_IBV_LINK_LAYER_INFINIBAND"),
+    ],
+)
+def test_resolve_rdma_link_type_rejects_mismatched_override(requested, detected):
+    with pytest.raises(ValueError, match="does not match detected"):
+        _slime_c._resolve_rdma_link_type(requested, getattr(_slime_c, detected))
+
+
+def test_resolve_rdma_link_type_rejects_invalid_input():
+    with pytest.raises(ValueError, match="expected auto, IB, or RoCE"):
+        _slime_c._resolve_rdma_link_type(
+            "tcp", _slime_c._IBV_LINK_LAYER_ETHERNET
+        )
+
+
+def test_resolve_rdma_link_type_rejects_unknown_hardware_layer():
+    with pytest.raises(RuntimeError, match="Unsupported RDMA port link layer"):
+        _slime_c._resolve_rdma_link_type("auto", 0xFF)
 
 
 def test_discover_topology_uses_preferred_protocol_when_sysfs_is_missing(tmp_path):

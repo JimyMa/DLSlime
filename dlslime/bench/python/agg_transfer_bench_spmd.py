@@ -164,7 +164,7 @@ if args.transfer_engine in ["dlslime", "mooncake"]:
     print(f"setting NIC for {rdma_device}")
 
 if args.transfer_engine == "dlslime":
-    rdma_endpoint = RDMAEndpoint(rdma_device, 1, "RoCE", qp_num)
+    rdma_endpoint = RDMAEndpoint(device_name=rdma_device, ib_port=1, num_qp=qp_num)
 elif args.transfer_engine == "mooncake":
     engine = MooncakeTransferEngine()
     result = engine.initialize(f"{local_ip}:12001", "P2PHANDSHAKE", "rdma", rdma_device)

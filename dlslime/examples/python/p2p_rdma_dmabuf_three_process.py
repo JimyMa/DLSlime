@@ -8,7 +8,7 @@ allocation into C's GPU allocation.
 Run with::
 
     python examples/python/p2p_rdma_dmabuf_three_process.py \
-        --rdma-device mlx5_0 --link-type IB
+        --rdma-device mlx5_0
 """
 
 from __future__ import annotations
@@ -263,7 +263,11 @@ def main() -> int:
     parser.add_argument("--destination-cuda-device", type=int, default=0)
     parser.add_argument("--rdma-device")
     parser.add_argument("--ib-port", type=int, default=1)
-    parser.add_argument("--link-type", default="IB")
+    parser.add_argument(
+        "--link-type",
+        default="auto",
+        help="Optional compatibility/diagnostic override; normally leave as auto",
+    )
     parser.add_argument("--bytes", type=int, default=16 * 1024 * 1024)
     parser.add_argument("--pattern", type=lambda value: int(value, 0), default=0x5A)
     args = parser.parse_args()

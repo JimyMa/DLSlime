@@ -150,9 +150,25 @@ PYBIND11_MODULE(_slime_c, m)
 #ifdef BUILD_RDMA
     py::class_<dlslime::RDMAContext, std::shared_ptr<dlslime::RDMAContext>>(m, "RDMAContext")
         .def(py::init<>())
-        .def("init", &dlslime::RDMAContext::init)
+        .def("init",
+             &dlslime::RDMAContext::init,
+             py::arg("device_name"),
+             py::arg("ib_port")   = 1,
+             py::arg("link_type") = "auto")
         .def("launch_future", &dlslime::RDMAContext::launch_future)
         .def("stop_future", &dlslime::RDMAContext::stop_future);
+
+    // Private, hardware-free test seam for the same resolver used by
+    // RDMAContext::init after ibv_query_port().
+    m.def("_resolve_rdma_link_type", [](const std::string& requested, int link_layer) {
+        if (link_layer < 0 || link_layer > 255) {
+            throw std::invalid_argument("link_layer must be in range 0..255");
+        }
+        return std::string(
+            dlslime::rdmaLinkTypeName(dlslime::resolveRdmaLinkType(requested, static_cast<uint8_t>(link_layer))));
+    });
+    py::setattr(m, "_IBV_LINK_LAYER_INFINIBAND", py::int_(static_cast<int>(IBV_LINK_LAYER_INFINIBAND)));
+    py::setattr(m, "_IBV_LINK_LAYER_ETHERNET", py::int_(static_cast<int>(IBV_LINK_LAYER_ETHERNET)));
 
     // =========================================================================
     // Unified RDMA Endpoint Binding
@@ -231,7 +247,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<std::string, int32_t, std::string, size_t, std::shared_ptr<dlslime::RDMAWorker>>(),
              py::arg("device_name") = "",
              py::arg("ib_port")     = 1,
-             py::arg("link_type")   = "RoCE",
+             py::arg("link_type")   = "auto",
              py::arg("num_qp")      = 1,
              py::arg("worker")      = nullptr)
 

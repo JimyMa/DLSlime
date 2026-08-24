@@ -5,8 +5,8 @@ num_qp = 1
 devices = available_nic()
 
 if __name__ == "__main__":
-    send_endpoint = _slime_c.RDMAEndpoint(devices[0], 1, "RoCE", 1)
-    recv_endpoint = _slime_c.RDMAEndpoint(devices[1], 1, "RoCE", 1)
+    send_endpoint = _slime_c.RDMAEndpoint(device_name=devices[0], ib_port=1, num_qp=1)
+    recv_endpoint = _slime_c.RDMAEndpoint(device_name=devices[1], ib_port=1, num_qp=1)
 
     send_endpoint.connect(recv_endpoint.endpoint_info())
     recv_endpoint.connect(send_endpoint.endpoint_info())

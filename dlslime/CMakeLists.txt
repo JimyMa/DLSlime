@@ -14,6 +14,7 @@ slime_option(USE_MACA                  "USE in MACA Platform"             OFF)
 slime_option(BUILD_NVLINK              "Build NVLINK"                     OFF)
 slime_option(BUILD_ASCEND_DIRECT       "Build Ascend direct transport"    OFF)
 slime_option(BUILD_TCP                 "Build TCP transport"               ON)
+slime_option(BUILD_TOPO_SYSFS          "Build sysfs topology backend"       ON)
 
 # Slime options for custom python wrapper
 slime_option(BUILD_PYTHON              "Build python wrapper"             OFF)
@@ -57,14 +58,15 @@ endif()
 include_directories(.)
 add_subdirectory(dlslime/csrc)
 
-# Define global imported target for external consumers (e.g. NanoDeploy, Spoke)
-if(TARGET _slime_rdma AND NOT TARGET dlslime::dlslime)
-    add_library(dlslime::dlslime INTERFACE IMPORTED GLOBAL)
-    target_link_libraries(dlslime::dlslime INTERFACE _slime_rdma)
+# Keep the build-tree consumer target available in every transport
+# configuration. The installed export provides the same namespaced target.
+if(NOT TARGET dlslime::dlslime)
+    add_library(dlslime::dlslime ALIAS dlslime)
 endif()
 
 
 if (BUILD_TEST)
+    include(CTest)
     add_subdirectory(tests/cpp)
 endif (BUILD_TEST)
 
@@ -76,6 +78,7 @@ install(
     DESTINATION include/dlslime
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
     PATTERN "python" EXCLUDE  # Exclude python bindings source if present
+    PATTERN "topology/sysfs_backend.h" EXCLUDE
 )
 
 # 2. Install Targets Export

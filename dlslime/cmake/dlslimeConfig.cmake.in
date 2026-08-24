@@ -11,10 +11,7 @@ endif()
 set_and_check(dlslime_INCLUDE_DIR "@PACKAGE_INSTALL_INCLUDE_DIR@")
 set(dlslime_INCLUDE_DIRS ${dlslime_INCLUDE_DIR})
 
-# Expose library targets
-set(dlslime_LIBRARIES dlslime::_slime_engine dlslime::_slime_device)
-if(TARGET dlslime::_slime_rdma)
-    list(APPEND dlslime_LIBRARIES dlslime::_slime_rdma)
-endif()
+# Expose the complete dependency graph for legacy/manual consumers.
+set(dlslime_LIBRARIES dlslime::dlslime)
 
 check_required_components(dlslime)

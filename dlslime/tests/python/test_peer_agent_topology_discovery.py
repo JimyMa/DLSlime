@@ -377,6 +377,7 @@ def test_publish_resource_record_and_get_resource_round_trip():
                 }
             ],
             "topology_epoch": 123,
+            "topology_backends": {"sysfs": "AVAILABLE"},
         }
     )
 
@@ -394,6 +395,7 @@ def test_publish_resource_record_and_get_resource_round_trip():
     assert resource["host"]["address"] == "10.0.0.1"
     assert resource["memory_keys"] == ["attn", "kv"]
     assert resource["nics"][0]["name"] == "mlx5_0"
+    assert resource["topology_backends"] == {"sysfs": "AVAILABLE"}
 
     own_resource = writer.get_resource()
     assert own_resource is writer._local_resource
@@ -445,3 +447,18 @@ def test_discover_topology_returns_empty_when_no_nics(tmp_path):
     )
     assert resource["nics"] == []
     assert resource.get("schema_version") == 1
+    assert resource["topology_backends"]["sysfs"] == "AVAILABLE"
+
+
+def test_discover_topology_reports_unavailable_sysfs_backend(tmp_path):
+    missing_root = tmp_path / "missing"
+    resource = discover_topology(
+        preferred_device=None,
+        ib_port=1,
+        preferred_link_type=None,
+        sysfs_root=str(missing_root),
+        devices=None,
+    )
+
+    assert resource["nics"] == []
+    assert resource["topology_backends"]["sysfs"] == "UNAVAILABLE"

@@ -15,6 +15,7 @@ slime_option(BUILD_NVLINK              "Build NVLINK"                     OFF)
 slime_option(BUILD_ASCEND_DIRECT       "Build Ascend direct transport"    OFF)
 slime_option(BUILD_TCP                 "Build TCP transport"               ON)
 slime_option(BUILD_TOPO_SYSFS          "Build sysfs topology backend"       ON)
+slime_option(BUILD_TOPO_CUDA           "Build CUDA topology backend"        OFF)
 
 # Slime options for custom python wrapper
 slime_option(BUILD_PYTHON              "Build python wrapper"             OFF)
@@ -39,6 +40,10 @@ if (BUILD_NVLINK)
     set(CMAKE_CUDA_ARCHITECTURES "90")
     find_package(CUDAToolkit REQUIRED)
     include_directories(${CUDAToolkit_INCLUDE_DIRS})
+endif()
+
+if (BUILD_TOPO_CUDA)
+    find_package(CUDAToolkit 13.0 REQUIRED)
 endif()
 
 if (BUILD_PYTHON)
@@ -79,6 +84,7 @@ install(
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
     PATTERN "python" EXCLUDE  # Exclude python bindings source if present
     PATTERN "topology/sysfs_backend.h" EXCLUDE
+    PATTERN "topology/cuda_backend.h" EXCLUDE
 )
 
 # 2. Install Targets Export

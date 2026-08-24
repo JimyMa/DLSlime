@@ -1,7 +1,7 @@
 import threading
 
 import pytest
-from dlslime import discover_topology
+from dlslime import RDMAEndpoint, discover_topology
 from dlslime.peer_agent import _agent as peer_agent_mod
 from dlslime.peer_agent._agent import DirectedConnection, PeerAgent, RdmaResourceKey
 
@@ -153,6 +153,11 @@ def test_discover_topology_prefers_requested_device_and_normalizes_sysfs(tmp_pat
     assert mlx5_1["health"] == "DEGRADED"
     assert mlx5_1["ports"][0]["link_type"] == "IB"
     assert mlx5_1["ports"][0]["state"] == "DOWN"
+
+
+def test_rdma_endpoint_defaults_to_automatic_link_type_detection():
+    init_doc = RDMAEndpoint.__init__.__doc__ or ""
+    assert "link_type: str = 'auto'" in init_doc
 
 
 def test_discover_topology_uses_preferred_protocol_when_sysfs_is_missing(tmp_path):

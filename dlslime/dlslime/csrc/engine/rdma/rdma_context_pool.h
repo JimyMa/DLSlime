@@ -21,7 +21,7 @@ public:
     }
 
     std::shared_ptr<RDMAContext>
-    get_context(const std::string& dev_name = "", uint8_t ib_port = 1, const std::string& link_type = "RoCE")
+    get_context(const std::string& dev_name = "", uint8_t ib_port = 1, const std::string& link_type = "auto")
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
@@ -35,7 +35,12 @@ public:
             key = nics[0];
         }
 
-        if (contexts_.find(key) == contexts_.end()) {
+        // Contexts are bound to a physical port. Retaining the requested mode
+        // in the key also ensures a bad explicit override is validated rather
+        // than silently reusing a context created through automatic detection.
+        const std::string context_key = key + ":" + std::to_string(ib_port) + ":" + link_type;
+
+        if (contexts_.find(context_key) == contexts_.end()) {
             SLIME_LOG_INFO("Initializing new RDMAContext for device: ", key);
 
             auto context = std::make_shared<RDMAContext>();
@@ -45,14 +50,14 @@ public:
                 return nullptr;
             }
 
-            contexts_[key] = context;
+            contexts_[context_key] = context;
 
             if (!default_context_) {
                 default_context_ = context;
             }
         }
 
-        return contexts_[key];
+        return contexts_[context_key];
     }
 
     std::shared_ptr<RDMAContext> get_default_context()

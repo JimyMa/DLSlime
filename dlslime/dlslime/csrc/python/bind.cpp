@@ -231,7 +231,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<std::string, int32_t, std::string, size_t, std::shared_ptr<dlslime::RDMAWorker>>(),
              py::arg("device_name") = "",
              py::arg("ib_port")     = 1,
-             py::arg("link_type")   = "RoCE",
+             py::arg("link_type")   = "auto",
              py::arg("num_qp")      = 1,
              py::arg("worker")      = nullptr)
 

@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -122,28 +123,51 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         SLIME_ABORT("Unable to query port " + std::to_string(ib_port_) + "\n");
     }
 
-    if ((port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND && link_type == "RoCE")
-        || (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET && link_type == "IB")) {
-        SLIME_ABORT("port link layer and config link type don't match");
-    }
-
     if (port_attr.state == IBV_PORT_DOWN) {
         ibv_close_device(ib_ctx_);
         SLIME_ABORT("Device " << dev_name << ", Port " << int{ib_port_} << "is DISABLED.");
     }
 
-    if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
-        gidx_ = -1;
+    std::string requested_link_type = link_type;
+    std::transform(requested_link_type.begin(), requested_link_type.end(), requested_link_type.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    if (requested_link_type.empty()) {
+        requested_link_type = "auto";
     }
-    else {
+    else if (requested_link_type == "ethernet" || requested_link_type == "rocev1"
+             || requested_link_type == "rocev2" || requested_link_type == "roce v2") {
+        requested_link_type = "roce";
+    }
+    else if (requested_link_type == "infiniband") {
+        requested_link_type = "ib";
+    }
+    if (requested_link_type != "auto" && requested_link_type != "ib" && requested_link_type != "roce") {
+        SLIME_ABORT("Unsupported RDMA link type '" << link_type << "' (expected auto, IB, or RoCE)");
+    }
+
+    std::string detected_link_type;
+    if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
+        detected_link_type = "IB";
+        gidx_               = -1;
+    }
+    else if (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET) {
+        detected_link_type = "RoCE";
         if (SLIME_GID_INDEX > 0)
             gidx_ = SLIME_GID_INDEX;
         else
             gidx_ = ibv_find_sgid_type(ib_ctx_, ib_port_, ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V2, AF_INET);
-        if (gidx_ < 0) {
+        if (gidx_ < 0)
             SLIME_ABORT("Failed to find GID");
-        }
     }
+    else {
+        SLIME_ABORT("Unsupported link layer for device " << dev_name << ", port " << int{ib_port_});
+    }
+
+    if (requested_link_type != "auto" && requested_link_type != (detected_link_type == "IB" ? "ib" : "roce"))
+        SLIME_ABORT("Device " << dev_name << ", port " << int{ib_port_} << " is " << detected_link_type
+                               << " but link_type='" << link_type << "' was requested");
+
+    SLIME_LOG_INFO("Detected RDMA link type ", detected_link_type, " for ", dev_name, ":", int{ib_port_});
 
     SLIME_LOG_DEBUG("Set GID INDEX to " << gidx_);
 

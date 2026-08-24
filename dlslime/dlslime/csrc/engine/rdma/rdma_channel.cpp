@@ -74,7 +74,7 @@ int32_t RDMAChannel::init(std::shared_ptr<RDMAContext> ctx, size_t num_qp, int32
         int32_t psn = lrand48() & 0xffffff;
 
         /* Get GID */
-        if (ctx_->gidx_ != -1 && ibv_query_gid(ctx_->ib_ctx_, 1, ctx_->gidx_, &ctx_->gid_)) {
+        if (ctx_->gidx_ != -1 && ibv_query_gid(ctx_->ib_ctx_, ctx_->ib_port_, ctx_->gidx_, &ctx_->gid_)) {
             SLIME_LOG_ERROR("[" << ctx_->device_name_ << "] Failed to get GID");
         }
 

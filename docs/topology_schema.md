@@ -2,6 +2,7 @@
 
 `discover_topology()` returns additive discovery facts. Check `topology_backends` before interpreting backend-specific fields.
 Run `python dlslime/examples/python/discover_cuda_topology.py` for a readable summary, or add `--json` for the complete document.
+If it reports `cuda=NOT_BUILT`, rebuild the Python package from the repository root with `BUILD_TOPO_CUDA=ON pip install -v --no-build-isolation -e dlslime`.
 
 - `device_index` is the process-visible CUDA ordinal and may be remapped by `CUDA_VISIBLE_DEVICES`; use `uuid` across processes or nodes.
 - `cuda_p2p_edges` is directed CUDA peer access. P2P does not imply NVLink because PCIe P2P is valid.

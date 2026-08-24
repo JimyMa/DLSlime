@@ -10,6 +10,10 @@ from dlslime import discover_topology
 def _print_summary(topology: dict) -> None:
     backends = topology.get("topology_backends", {})
     print("Backends:", ", ".join(f"{name}={status}" for name, status in sorted(backends.items())))
+    if backends.get("cuda") == "NOT_BUILT":
+        print("CUDA topology backend was not built into this dlslime installation.")
+        print("Reinstall from the repository root with:")
+        print("  BUILD_TOPO_CUDA=ON pip install -v --no-build-isolation -e dlslime")
 
     imex = topology.get("runtime_capabilities", {}).get("cuda", {}).get("imex", {})
     print(f"IMEX: available={imex.get('available', False)} channels={imex.get('channel_ids', [])}")

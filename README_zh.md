@@ -230,6 +230,7 @@ cmake --build build
 | `BUILD_TORCH_PLUGIN`  |                                        `OFF` | 构建 DLSlime torch backend               |
 | `BUILD_BENCH`         |                                        `OFF` | 构建 C++ 传输引擎 benchmark              |
 | `BUILD_TEST`          |                                        `OFF` | 构建 C++ 测试                            |
+| `BUILD_TOPO_CUDA`     | `USE_CUDA` 或 `BUILD_NVLINK` 开启时为 `ON`，否则为 `OFF` | 构建可选 CUDA/NVML 拓扑探测（CUDA >= 13.0） |
 | `USE_MACA`            |                                        `OFF` | 为 torch backend 构建启用 Metax 平台支持 |
 
 ## Benchmark

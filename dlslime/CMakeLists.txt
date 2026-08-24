@@ -15,7 +15,11 @@ slime_option(BUILD_NVLINK              "Build NVLINK"                     OFF)
 slime_option(BUILD_ASCEND_DIRECT       "Build Ascend direct transport"    OFF)
 slime_option(BUILD_TCP                 "Build TCP transport"               ON)
 slime_option(BUILD_TOPO_SYSFS          "Build sysfs topology backend"       ON)
-slime_option(BUILD_TOPO_CUDA           "Build CUDA topology backend"        OFF)
+set(BUILD_TOPO_CUDA_DEFAULT OFF)
+if(USE_CUDA OR BUILD_NVLINK)
+    set(BUILD_TOPO_CUDA_DEFAULT ON)
+endif()
+slime_option(BUILD_TOPO_CUDA           "Build CUDA topology backend"        ${BUILD_TOPO_CUDA_DEFAULT})
 
 # Slime options for custom python wrapper
 slime_option(BUILD_PYTHON              "Build python wrapper"             OFF)

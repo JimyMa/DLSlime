@@ -60,6 +60,7 @@ public:
                 ibv_dereg_mr(mr);
         }
         handle_to_mr_.clear();
+        handle_to_iova_.clear();
         ptr_to_handle_.clear();
         name_to_handle_.clear();
 
@@ -75,6 +76,12 @@ public:
     // Returns: handle (int32_t)
     int32_t registerMemoryRegion(uintptr_t data_ptr, uint64_t length, std::optional<std::string> name = std::nullopt);
 
+    // Register a dma-buf backed memory region. The descriptor is borrowed for
+    // this call; higher-level owners must keep it alive if the logical region
+    // may later be materialized against another protection domain.
+    int32_t registerDmaBufMemoryRegion(
+        int fd, uint64_t offset, uint64_t length, uint64_t iova, std::optional<std::string> name = std::nullopt);
+
     int32_t get_mr_handle(const std::string& name);
     int32_t get_mr_handle(uintptr_t data_ptr);
 
@@ -85,6 +92,14 @@ public:
             return handle_to_mr_[handle];
         }
         return nullptr;
+    }
+
+    inline uint64_t get_mr_iova_fast(int32_t handle) const
+    {
+        if (handle >= 0 && static_cast<size_t>(handle) < handle_to_iova_.size()) {
+            return handle_to_iova_[handle];
+        }
+        return 0;
     }
 
     // Legacy method: get_mr by pointer key (slow check in a map or we can deprecate it)
@@ -136,6 +151,11 @@ private:
     std::unordered_map<uintptr_t, int32_t>   ptr_to_handle_;
 
     std::vector<struct ibv_mr*> handle_to_mr_;
+
+    // DMA-BUF registration accepts an explicit IOVA. libibverbs does not
+    // guarantee ibv_mr::addr contains it, so preserve the address used in
+    // SGEs and published remote metadata separately.
+    std::vector<uint64_t> handle_to_iova_;
 
     // Observability: remember whether each registered MR is a system
     // (internal "sys.*") MR or a user-visible MR. Looked up on unregister

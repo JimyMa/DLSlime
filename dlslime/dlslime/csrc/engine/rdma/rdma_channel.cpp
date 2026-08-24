@@ -225,13 +225,16 @@ int64_t RDMAChannel::post_send_batch(int qpi, RDMAAssign* assign, std::shared_pt
 
         Assignment&    subassign = assign->batch_[i];
         struct ibv_mr* mr;
+        uint64_t       iova_base;
         if (subassign.mr_key < 1000000) {
-            mr = local_pool->get_mr_fast((int32_t)subassign.mr_key);
+            mr        = local_pool->get_mr_fast((int32_t)subassign.mr_key);
+            iova_base = local_pool->get_mr_iova_fast((int32_t)subassign.mr_key);
         }
         else {
-            mr = local_pool->get_mr(subassign.mr_key);
+            mr        = local_pool->get_mr(subassign.mr_key);
+            iova_base = (uintptr_t)mr->addr;
         }
-        sge[i].addr      = (uintptr_t)mr->addr + subassign.source_offset;
+        sge[i].addr      = iova_base + subassign.source_offset;
         sge[i].length    = subassign.length;
         sge[i].lkey      = mr->lkey;
         wr[i].wr_id      = (i == batch_size - 1) ? (uintptr_t)(assign) : 0;
@@ -275,13 +278,16 @@ int64_t RDMAChannel::post_recv_batch(int qpi, RDMAAssign* assign, std::shared_pt
 
         Assignment&    subassign = assign->batch_[i];
         struct ibv_mr* mr;
+        uint64_t       iova_base;
         if (subassign.mr_key < 1000000) {
-            mr = local_pool->get_mr_fast((int32_t)subassign.mr_key);
+            mr        = local_pool->get_mr_fast((int32_t)subassign.mr_key);
+            iova_base = local_pool->get_mr_iova_fast((int32_t)subassign.mr_key);
         }
         else {
-            mr = local_pool->get_mr(subassign.mr_key);
+            mr        = local_pool->get_mr(subassign.mr_key);
+            iova_base = (uintptr_t)mr->addr;
         }
-        sge[i].addr   = (uintptr_t)mr->addr + subassign.source_offset;
+        sge[i].addr   = iova_base + subassign.source_offset;
         sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
         wr[i].wr_id   = (i == batch_size - 1) ? (uintptr_t)(assign) : 0;
@@ -320,7 +326,7 @@ int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign, std::sha
         remote_mr_t    remote_mr = remote_pool_->get_remote_mr_fast((int32_t)subassign.remote_mr_key);
 
         // RDMA: target=远端, source=本地. SGE=local(source), wr.rdma=remote(target)
-        sge[i].addr   = (uintptr_t)mr->addr + subassign.source_offset;
+        sge[i].addr   = local_pool->get_mr_iova_fast((int32_t)subassign.mr_key) + subassign.source_offset;
         sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
 

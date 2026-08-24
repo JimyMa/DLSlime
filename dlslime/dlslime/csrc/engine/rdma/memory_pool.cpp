@@ -2,12 +2,14 @@
 
 #include <infiniband/verbs.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <optional>
+#include <stdexcept>
 #include <unordered_map>
 
 #include "dlslime/csrc/logging.h"
@@ -46,11 +48,18 @@ int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length
         uint64_t old_length = existing->length;
         SLIME_LOG_INFO("Re-registering MR at ", (void*)data_ptr, ": old length=", old_length, ", new length=", length);
         ibv_dereg_mr(existing);
+        handle_to_mr_[handle] = nullptr;
 
         int     access_rights = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
         ibv_mr* mr            = ibv_reg_mr(pd_, (void*)data_ptr, length, access_rights);
-        SLIME_ASSERT(mr, " Failed to re-register memory " << data_ptr);
-        handle_to_mr_[handle] = mr;
+        if (!mr) {
+            int saved_errno = errno;
+            throw std::runtime_error("ibv_reg_mr failed while re-registering address " + std::to_string(data_ptr)
+                                     + ": errno=" + std::to_string(saved_errno) + " (" + std::strerror(saved_errno)
+                                     + ")");
+        }
+        handle_to_mr_[handle]   = mr;
+        handle_to_iova_[handle] = data_ptr;
 
         if (name.has_value()) {
             name_to_handle_[name.value()] = handle;
@@ -72,10 +81,15 @@ int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length
     // New Registration
     int     access_rights = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
     ibv_mr* mr            = ibv_reg_mr(pd_, (void*)data_ptr, length, access_rights);
-    SLIME_ASSERT(mr, " Failed to register memory " << data_ptr);
+    if (!mr) {
+        int saved_errno = errno;
+        throw std::runtime_error("ibv_reg_mr failed for address " + std::to_string(data_ptr)
+                                 + ": errno=" + std::to_string(saved_errno) + " (" + std::strerror(saved_errno) + ")");
+    }
 
     int32_t handle = handle_to_mr_.size();
     handle_to_mr_.push_back(mr);
+    handle_to_iova_.push_back(data_ptr);
     ptr_to_handle_[data_ptr]     = handle;
     handle_to_is_system_[handle] = is_system;
 
@@ -96,6 +110,84 @@ int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length
 
     obs::obs_record_mr_register(length, is_system);
 
+    return handle;
+}
+
+int32_t RDMAMemoryPool::registerDmaBufMemoryRegion(
+    int fd, uint64_t offset, uint64_t length, uint64_t iova, std::optional<std::string> name)
+{
+    if (fd < 0) {
+        throw std::invalid_argument("dma-buf fd must be non-negative");
+    }
+    if (length == 0) {
+        throw std::invalid_argument("dma-buf MR length must be greater than zero");
+    }
+    long host_page_size = sysconf(_SC_PAGESIZE);
+    if (host_page_size <= 0) {
+        throw std::runtime_error("failed to query host page size");
+    }
+    if ((offset % host_page_size) != (iova % host_page_size)) {
+        throw std::invalid_argument("dma-buf offset and IOVA must have the same host-page offset");
+    }
+
+    std::unique_lock<std::mutex> lock(name_mutex_);
+    if (name.has_value()) {
+        auto existing = name_to_handle_.find(name.value());
+        if (existing != name_to_handle_.end()) {
+            int32_t handle = existing->second;
+            ibv_mr* mr     = handle_to_mr_[handle];
+            if (mr != nullptr && mr->length >= length && handle_to_iova_[handle] == iova) {
+                return handle;
+            }
+            throw std::invalid_argument("dma-buf MR name is already registered with a different range: "
+                                        + name.value());
+        }
+    }
+
+    int access_rights = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
+    errno             = 0;
+    ibv_mr* mr        = ibv_reg_dmabuf_mr(pd_, offset, length, iova, fd, access_rights);
+    if (!mr) {
+        int saved_errno = errno;
+        throw std::runtime_error("ibv_reg_dmabuf_mr failed: fd=" + std::to_string(fd)
+                                 + ", offset=" + std::to_string(offset) + ", length=" + std::to_string(length)
+                                 + ", iova=" + std::to_string(iova) + ", errno=" + std::to_string(saved_errno) + " ("
+                                 + std::strerror(saved_errno) + ")");
+    }
+
+    int32_t handle = static_cast<int32_t>(handle_to_mr_.size());
+    handle_to_mr_.push_back(mr);
+    handle_to_iova_.push_back(iova);
+    bool is_system               = name.has_value() && name.value().rfind("sys.", 0) == 0;
+    handle_to_is_system_[handle] = is_system;
+    if (name.has_value()) {
+        name_to_handle_[name.value()] = handle;
+        SLIME_LOG_INFO("Registered dma-buf MR: Name=",
+                       name.value(),
+                       ", Handle=",
+                       handle,
+                       ", FD=",
+                       fd,
+                       ", Offset=",
+                       offset,
+                       ", IOVA=",
+                       (void*)iova,
+                       ", Length=",
+                       length);
+    }
+    else {
+        SLIME_LOG_INFO("Registered dma-buf MR: Handle=",
+                       handle,
+                       ", FD=",
+                       fd,
+                       ", Offset=",
+                       offset,
+                       ", IOVA=",
+                       (void*)iova,
+                       ", Length=",
+                       length);
+    }
+    obs::obs_record_mr_register(length, is_system);
     return handle;
 }
 
@@ -164,6 +256,9 @@ int RDMAMemoryPool::unregisterMemoryRegion(int32_t handle)
     obs::obs_record_mr_unregister(mr_length, is_system);
 
     handle_to_mr_[handle] = nullptr;
+    if (static_cast<size_t>(handle) < handle_to_iova_.size()) {
+        handle_to_iova_[handle] = 0;
+    }
     handle_to_is_system_.erase(handle);
 
     for (auto it = name_to_handle_.begin(); it != name_to_handle_.end();) {
@@ -211,7 +306,7 @@ json RDMAMemoryPool::mrInfo()
         }
         mr_info[name] = {
             {"handle", handle},
-            {"addr", (uintptr_t)mr->addr},
+            {"addr", handle_to_iova_[handle]},
             {"rkey", mr->rkey},
             {"length", mr->length},
         };

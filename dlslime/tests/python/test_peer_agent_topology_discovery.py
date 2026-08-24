@@ -1,7 +1,7 @@
 import threading
 
 import pytest
-from dlslime import RDMAEndpoint, discover_topology
+from dlslime import RDMAContext, RDMAEndpoint, discover_topology
 from dlslime.peer_agent import _agent as peer_agent_mod
 from dlslime.peer_agent._agent import DirectedConnection, PeerAgent, RdmaResourceKey
 
@@ -157,6 +157,11 @@ def test_discover_topology_prefers_requested_device_and_normalizes_sysfs(tmp_pat
 
 def test_rdma_endpoint_defaults_to_automatic_link_type_detection():
     init_doc = RDMAEndpoint.__init__.__doc__ or ""
+    assert "link_type: str = 'auto'" in init_doc
+
+
+def test_rdma_context_init_defaults_to_automatic_link_type_detection():
+    init_doc = RDMAContext.init.__doc__ or ""
     assert "link_type: str = 'auto'" in init_doc
 
 

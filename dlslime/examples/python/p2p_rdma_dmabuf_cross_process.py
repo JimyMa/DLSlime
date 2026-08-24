@@ -12,7 +12,7 @@ Run after building DLSlime with RDMA support::
 Optionally select devices::
 
     python examples/python/p2p_rdma_dmabuf_cross_process.py \
-        --cuda-device 0 --rdma-device mlx5_0 --link-type RoCE
+        --cuda-device 0 --rdma-device mlx5_0
 """
 
 from __future__ import annotations
@@ -243,7 +243,11 @@ def main() -> int:
     parser.add_argument("--cuda-device", type=int, default=0)
     parser.add_argument("--rdma-device")
     parser.add_argument("--ib-port", type=int, default=1)
-    parser.add_argument("--link-type", default="IB")
+    parser.add_argument(
+        "--link-type",
+        default="auto",
+        help="RDMA link type override (auto, IB, or RoCE; default: auto)",
+    )
     parser.add_argument("--bytes", type=int, default=16 * 1024 * 1024)
     args = parser.parse_args()
     if args.agent:

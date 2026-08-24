@@ -150,7 +150,9 @@ PYBIND11_MODULE(_slime_c, m)
 #ifdef BUILD_RDMA
     py::class_<dlslime::RDMAContext, std::shared_ptr<dlslime::RDMAContext>>(m, "RDMAContext")
         .def(py::init<>())
-        .def("init", &dlslime::RDMAContext::init)
+        .def("init",
+             &dlslime::RDMAContext::init,
+             py::arg("device_name"), py::arg("ib_port") = 1, py::arg("link_type") = "auto")
         .def("launch_future", &dlslime::RDMAContext::launch_future)
         .def("stop_future", &dlslime::RDMAContext::stop_future);
 

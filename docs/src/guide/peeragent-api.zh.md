@@ -37,6 +37,26 @@ conn = agent.connect_to("worker-b", ib_port=1, qp_num=1)
 conn.wait(timeout=60)
 ```
 
+### 选择传输层
+
+兼容旧行为时可继续使用 `transport="rdma"`。跨节点 MNNVL CUDA Fabric
+连接显式使用 `transport="nvlink"`；TCP 同样必须显式请求。
+
+```python
+region = agent.allocate_memory_region("kv", 64 * 1024 * 1024)
+conn = agent.connect_to("worker-b", transport="nvlink")
+conn.sync_memory_regions(timeout=60)
+conn.wait(timeout=60)
+assert conn.transport == "nvlink"
+```
+
+`local_device` 和 `peer_device` 可使用进程可见 CUDA ordinal、GPU UUID 或
+`cuda:GPU-...`。每个 Ray actor 只看到一张 MNNVL GPU 时无需显式传入。
+
+`dlslime-ctrl status` 只用于确认控制面健康。本地 CUDA facts 使用
+`discover_cuda_topology.py --json` 检查；双节点示例还会打印两端注册的
+PeerAgent resource，用于确认 MNNVL membership 匹配且存在共同可读的 IMEX channel。
+
 常用方法：
 
 | 方法                             | 作用                                          |
@@ -65,6 +85,19 @@ peer_info = agent.get_mr_info("kv", peer_alias="worker-b")
 
 底层 tensor 或 buffer 必须在 memory region 注册期间保持存活，并且所有相关 future 完成前不能释放或复用。
 
+PeerAgent 也可以直接分配并持有可导出的 CUDA Fabric VMM memory：
+
+```python
+region = agent.allocate_memory_region(
+    "kv_cache", 256 * 1024 * 1024, memory_kind="cuda_fabric"
+)
+print(region.ptr, region.length, region.device)
+```
+
+应用可将 `region.ptr` 零拷贝包装为 CUDA tensor。该 allocation 的生命周期
+由 PeerAgent 管理；两台主机还必须有共同可读的 IMEX channel，才能完成
+Fabric handle export/import。
+
 ## 命名 I/O
 
 PeerAgent 支持两种 assignment：
@@ -81,11 +114,11 @@ future.wait()
 
 可用 I/O 方法：
 
-| 方法                                                               | 作用                                |
-| ------------------------------------------------------------------ | ----------------------------------- |
-| `read(peer_alias, assignments, stream=None)`                       | 从 peer RDMA read 到本地内存。      |
-| `write(peer_alias, assignments, stream=None)`                      | 从本地 RDMA write 到 peer 内存。    |
-| `write_with_imm(peer_alias, assignments, imm_data=0, stream=None)` | 携带 immediate data 的 RDMA write。 |
-| `send(peer_alias, chunk, stream_handler=None)`                     | 消息发送。                          |
-| `recv(peer_alias, chunk, stream_handler=None)`                     | 消息接收。                          |
-| `imm_recv(peer_alias, stream=None)`                                | 接收 immediate-data event。         |
+| 方法                                                               | 作用                                  |
+| ------------------------------------------------------------------ | ------------------------------------- |
+| `read(peer_alias, assignments, stream=None)`                       | 通过已选择的 transport 从 peer 读取。 |
+| `write(peer_alias, assignments, stream=None)`                      | 通过已选择的 transport 写入 peer。    |
+| `write_with_imm(peer_alias, assignments, imm_data=0, stream=None)` | 携带 immediate data 的 RDMA write。   |
+| `send(peer_alias, chunk, stream_handler=None)`                     | 消息发送。                            |
+| `recv(peer_alias, chunk, stream_handler=None)`                     | 消息接收。                            |
+| `imm_recv(peer_alias, stream=None)`                                | 接收 immediate-data event。           |

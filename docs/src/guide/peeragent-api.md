@@ -74,13 +74,15 @@ conn.wait(timeout=60)
 | `peer_alias`               | Remote PeerAgent alias.                                                    |
 | `local_nic` / `remote_nic` | Selected local and remote NICs.                                            |
 | `state`                    | Connection state such as `connecting`, `connected`, or `failed`.           |
-| `endpoint`                 | Underlying `RDMAEndpoint` or `TcpEndpoint` once created.                   |
+| `transport`                | Selected transport: `nvlink`, `rdma`, or `tcp`.                            |
+| `endpoint`                 | Underlying transport endpoint once created.                                |
 | `peer_endpoint_info`       | Peer's `endpoint_info` dict captured during handshake (TCP one-sided ops). |
 
 ### Selecting the transport
 
-`connect_to(transport=...)` picks the underlying transport. RDMA is the
-default; pass `transport="tcp"` to bind a `TcpEndpoint` instead. See
+`connect_to(transport=...)` picks the underlying transport. RDMA remains the
+default for compatibility. Pass `transport="nvlink"` to use CUDA Fabric between
+MNNVL peers, or `transport="tcp"` to bind a `TcpEndpoint` explicitly. See
 [TCP Transport](tcp-transport.md) for the full TCP flow, the
 `local_host`/`local_port` kwargs, and one-sided I/O over TCP.
 
@@ -88,6 +90,26 @@ default; pass `transport="tcp"` to bind a `TcpEndpoint` instead. See
 conn = agent.connect_to("worker-b", transport="tcp")
 conn.wait()
 ```
+
+For NVLink connections, allocate and publish CUDA Fabric
+memory before synchronizing endpoint metadata:
+
+```python
+region = agent.allocate_memory_region("kv", 64 * 1024 * 1024)
+conn = agent.connect_to("worker-b", transport="nvlink")
+conn.sync_memory_regions(timeout=60)
+conn.wait(timeout=60)
+assert conn.transport == "nvlink"
+```
+
+`local_device` and `peer_device` accept a process-visible CUDA ordinal, GPU
+UUID, or `cuda:GPU-...`. They are optional when the process sees exactly one
+MNNVL-ready GPU, as in a one-Ray-actor-per-GPU deployment.
+
+Use `dlslime-ctrl status` to verify control-plane health. Inspect local CUDA
+facts with `discover_cuda_topology.py --json`; the two-node example also prints
+each registered PeerAgent resource so matching MNNVL membership and a common
+readable IMEX channel can be verified before connecting.
 
 For bidirectional flows, both agents normally call `connect_to` and wait on
 their local handle:
@@ -132,6 +154,22 @@ agent.shutdown()
 Keep the underlying tensor or buffer alive while the memory region is registered
 and while any future using it is in flight.
 
+### PeerAgent-owned CUDA Fabric memory
+
+`allocate_memory_region` creates and registers an exportable CUDA Fabric VMM
+allocation:
+
+```python
+region = agent.allocate_memory_region(
+    "kv_cache", 256 * 1024 * 1024, memory_kind="cuda_fabric"
+)
+print(region.ptr, region.length, region.device)
+```
+
+Applications may wrap `region.ptr` with their CUDA framework without copying.
+The allocation remains PeerAgent-owned, and both hosts need a common readable
+IMEX channel for Fabric handle export/import.
+
 ## Named I/O
 
 PeerAgent accepts two assignment styles:
@@ -161,8 +199,8 @@ Available I/O methods:
 
 | Method                                                             | Purpose                                        |
 | ------------------------------------------------------------------ | ---------------------------------------------- |
-| `read(peer_alias, assignments, stream=None)`                       | RDMA read from peer into local memory.         |
-| `write(peer_alias, assignments, stream=None)`                      | RDMA write from local memory into peer memory. |
+| `read(peer_alias, assignments, stream=None)`                       | Read from peer through the selected transport. |
+| `write(peer_alias, assignments, stream=None)`                      | Write to peer through the selected transport.  |
 | `write_with_imm(peer_alias, assignments, imm_data=0, stream=None)` | RDMA write with immediate data.                |
 | `send(peer_alias, chunk, stream_handler=None)`                     | Message send through the selected endpoint.    |
 | `recv(peer_alias, chunk, stream_handler=None)`                     | Message receive through the selected endpoint. |
@@ -201,5 +239,6 @@ target.shutdown()
 
 - `dlslime/examples/python/p2p_rdma_rc_read_ctrl_plane.py`
 - `dlslime/examples/python/p2p_rdma_multi_agents_ctrl_plane.py`
+- `dlslime/examples/python/p2p_nvlink_peer_agent_two_node.py`
 - `dlslime/examples/python/cache_client_example.py`
 - `dlslime/examples/python/rpc_example.py`

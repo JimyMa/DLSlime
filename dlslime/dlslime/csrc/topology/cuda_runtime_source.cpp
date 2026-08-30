@@ -204,6 +204,18 @@ std::string fabricHealth(unsigned char health)
     }
 }
 
+std::string fabricHealthMask(unsigned int health)
+{
+    const bool degraded   = NVML_GPU_FABRIC_HEALTH_TEST(health, _DEGRADED_BW, _TRUE);
+    const bool recovering = NVML_GPU_FABRIC_HEALTH_TEST(health, _ROUTE_RECOVERY, _TRUE)
+                            || NVML_GPU_FABRIC_HEALTH_TEST(health, _ACCESS_TIMEOUT_RECOVERY, _TRUE);
+    const bool         unhealthy     = NVML_GPU_FABRIC_HEALTH_TEST(health, _ROUTE_UNHEALTHY, _TRUE);
+    const unsigned int configuration = NVML_GPU_FABRIC_HEALTH_GET(health, _INCORRECT_CONFIGURATION);
+    const bool misconfigured = configuration != NVML_GPU_FABRIC_HEALTH_MASK_INCORRECT_CONFIGURATION_NOT_SUPPORTED
+                               && configuration != NVML_GPU_FABRIC_HEALTH_MASK_INCORRECT_CONFIGURATION_NONE;
+    return (degraded || recovering || unhealthy || misconfigured) ? "UNHEALTHY" : "HEALTHY";
+}
+
 std::string remoteType(nvmlIntNvLinkDeviceType_t type)
 {
     switch (type) {
@@ -383,15 +395,23 @@ public:
 
                 if (nvml.fabric_info) {
                     nvmlGpuFabricInfoV_t info{};
-                    info.version = nvmlGpuFabricInfo_v3;
-                    if (nvml.fabric_info(nvml_device, &info) == NVML_SUCCESS
-                        && info.state != NVML_GPU_FABRIC_STATE_NOT_SUPPORTED) {
+                    info.version               = nvmlGpuFabricInfo_v3;
+                    nvmlReturn_t fabric_result = nvml.fabric_info(nvml_device, &info);
+                    bool         used_v2       = false;
+                    if (fabric_result == NVML_ERROR_ARGUMENT_VERSION_MISMATCH
+                        || fabric_result == NVML_ERROR_INVALID_ARGUMENT || fabric_result == NVML_ERROR_NOT_SUPPORTED) {
+                        info          = {};
+                        info.version  = nvmlGpuFabricInfo_v2;
+                        fabric_result = nvml.fabric_info(nvml_device, &info);
+                        used_v2       = fabric_result == NVML_SUCCESS;
+                    }
+                    if (fabric_result == NVML_SUCCESS && info.state != NVML_GPU_FABRIC_STATE_NOT_SUPPORTED) {
                         device.fabric = MnnvlFabricFact{
                             formatUuid(info.clusterUuid),
                             info.cliqueId,
                             fabricState(info.state),
                             info.status == NVML_SUCCESS ? "SUCCESS" : "ERROR",
-                            fabricHealth(info.healthSummary),
+                            used_v2 ? fabricHealthMask(info.healthMask) : fabricHealth(info.healthSummary),
                         };
                     }
                 }

@@ -39,9 +39,14 @@ set(DLSLIME_INSTALL_PATH "lib" CACHE STRING "Library installation directory")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (BUILD_NVLINK)
+    # CMake validates CMAKE_CUDA_ARCHITECTURES while enabling the language,
+    # so provide a non-empty default before enable_language(CUDA). Honour an
+    # explicit -DCMAKE_CUDA_ARCHITECTURES value when the caller supplies one.
+    if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
+        set(CMAKE_CUDA_ARCHITECTURES "native" CACHE STRING "CUDA architectures" FORCE)
+    endif()
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
-    set(CMAKE_CUDA_ARCHITECTURES "90")
     find_package(CUDAToolkit REQUIRED)
     include_directories(${CUDAToolkit_INCLUDE_DIRS})
 endif()

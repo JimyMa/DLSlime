@@ -14,6 +14,7 @@ import os
 import socket
 import threading
 import time
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -40,6 +41,11 @@ try:  # TCP support is a build-time option (BUILD_TCP). Tolerate its absence.
     from dlslime import TcpEndpoint as _TcpEndpoint
 except ImportError:  # pragma: no cover - exercised only on builds without TCP
     _TcpEndpoint = None  # type: ignore[assignment]
+
+try:
+    from dlslime import NVLinkEndpoint as _NVLinkEndpoint
+except ImportError:  # pragma: no cover - build without NVLink
+    _NVLinkEndpoint = None  # type: ignore[assignment]
 
 from dlslime.ctrl import NanoCtrlClient
 from dlslime.logging import get_logger
@@ -111,7 +117,29 @@ class TcpResourceKey:
         return f"tcp:{self.host}:{self.port}"
 
 
-ResourceKey = Union[RdmaResourceKey, TcpResourceKey]
+@dataclass(frozen=True)
+class NvlinkResourceKey:
+    uuid: str
+    device_index: int
+    cluster_uuid: str
+    clique_id: int
+
+    transport = "nvlink"
+    ib_port = 0
+    link_type = "NVLink"
+
+    @property
+    def device(self) -> str:
+        return f"cuda:{self.uuid}"
+
+    def redis_suffix(self) -> str:
+        return f"nvlink:{self.uuid}"
+
+    def conn_id_segment(self) -> str:
+        return f"nvlink:{self.uuid}"
+
+
+ResourceKey = Union[RdmaResourceKey, TcpResourceKey, NvlinkResourceKey]
 
 
 @dataclass
@@ -131,6 +159,40 @@ class MaterializedMemoryRegion:
     resource_key: ResourceKey
     handler: int
     info: Dict[str, Any]
+
+
+class PeerMemoryRegion:
+    """PeerAgent-owned CUDA memory allocation.
+
+    The pointer remains valid until close() or PeerAgent shutdown.
+    """
+
+    def __init__(
+        self, agent: "PeerAgent", name: str, info: Dict[str, Any], device: str
+    ) -> None:
+        self._agent_ref = weakref.ref(agent)
+        self.name = name
+        self.ptr = int(info["ptr"])
+        self.length = int(info["length"])
+        self.allocation_size = int(info.get("allocation_size", self.length))
+        self.memory_kind = "cuda_fabric"
+        self.device = device
+        self._closed = False
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        agent = self._agent_ref()
+        if agent is not None:
+            agent._release_owned_memory_region(self.name)
+        self._closed = True
+
+    def __enter__(self) -> "PeerMemoryRegion":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+        self.close()
+        return False
 
 
 class DirectedConnection:
@@ -206,6 +268,11 @@ class PeerConnection:
         """Return the peer alias for this connection."""
         return self._connection().peer_alias
 
+    @property
+    def transport(self) -> str:
+        """Return the selected transport name."""
+        return self._connection().transport
+
     def wait(self, timeout: float = 60.0) -> "PeerConnection":
         """Block until this peer connection is ready."""
         self._agent._wait_connected(self._conn_id, timeout_sec=timeout)
@@ -245,6 +312,11 @@ class PeerConnection:
         for resolving remote MR handles for one-sided ``read``/``write``.
         """
         return self._connection().peer_endpoint_info
+
+    def sync_memory_regions(self, timeout: float = 60.0) -> "PeerConnection":
+        """Synchronize transport-specific MR metadata with this peer."""
+        self._agent._sync_connection_memory_regions(self._conn_id, timeout)
+        return self
 
     @property
     def endpoint(self) -> Optional[Any]:
@@ -341,6 +413,13 @@ class PeerAgent:
             Tuple[str, ResourceKey], MaterializedMemoryRegion
         ] = {}
         self._regions_lock = threading.Lock()
+
+        # CUDA Fabric allocations are owned independently of per-peer endpoints
+        # so caches can be allocated before the first connection is created.
+        self._fabric_allocators: Dict[NvlinkResourceKey, Any] = {}
+        self._owned_memory_regions: Dict[
+            str, Tuple[NvlinkResourceKey, Any, int, Dict[str, Any]]
+        ] = {}
 
         # Worker pool for eager RDMAEndpoint construction in
         # connect_to. RDMAEndpoint() allocates QPs and takes
@@ -545,7 +624,7 @@ class PeerAgent:
     ) -> Tuple[Optional[RDMAContext], Optional[RDMAMemoryPool]]:
         # TCP endpoints own their memory map internally; no shared
         # context/pool object exists for them.
-        if isinstance(key, TcpResourceKey):
+        if isinstance(key, (TcpResourceKey, NvlinkResourceKey)):
             return None, None
         with self._resource_lock:
             if key not in self._contexts:
@@ -900,6 +979,61 @@ class PeerAgent:
     # ------------------------------------------------------------------
     # Peer / endpoint state
     # ------------------------------------------------------------------
+    @staticmethod
+    def _nvlink_resource_key(
+        resource: Dict[str, Any], device: Optional[str] = None
+    ) -> NvlinkResourceKey:
+        for accelerator in resource.get("accelerators") or []:
+            uuid = str(accelerator.get("uuid") or "")
+            index = int(accelerator.get("device_index", -1))
+            if device is not None and device not in {uuid, f"cuda:{uuid}", str(index)}:
+                continue
+            fabric = accelerator.get("mnnvl") or {}
+            if not fabric.get("membership_ready"):
+                continue
+            cluster_uuid = str(fabric.get("cluster_uuid") or "")
+            if not cluster_uuid:
+                continue
+            return NvlinkResourceKey(
+                uuid, index, cluster_uuid, int(fabric.get("clique_id", -1))
+            )
+        raise RuntimeError(f"No MNNVL-ready CUDA accelerator found (device={device!r})")
+
+    def _resolve_nvlink_keys(
+        self, peer_alias: str, local_device: Optional[str], peer_device: Optional[str]
+    ):
+        local_key = self._nvlink_resource_key(self._local_resource, local_device)
+        peer_resource = self.get_resource(peer_alias)
+        if peer_resource is None:
+            raise RuntimeError(
+                f"Peer {peer_alias!r} has not published its CUDA topology"
+            )
+        peer_key = self._nvlink_resource_key(peer_resource, peer_device)
+        if (local_key.cluster_uuid.lower(), local_key.clique_id) != (
+            peer_key.cluster_uuid.lower(),
+            peer_key.clique_id,
+        ):
+            raise RuntimeError(
+                f"Cannot create NVLink link across different MNNVL fabrics: local={local_key.cluster_uuid}:{local_key.clique_id}, peer={peer_key.cluster_uuid}:{peer_key.clique_id}"
+            )
+        local_imex = (
+            (self._local_resource.get("runtime_capabilities") or {}).get("cuda") or {}
+        ).get("imex") or {}
+        peer_imex = (
+            (peer_resource.get("runtime_capabilities") or {}).get("cuda") or {}
+        ).get("imex") or {}
+        local_channels = set(local_imex.get("channel_ids") or [])
+        peer_channels = set(peer_imex.get("channel_ids") or [])
+        if (
+            not local_imex.get("available")
+            or not peer_imex.get("available")
+            or not local_channels.intersection(peer_channels)
+        ):
+            raise RuntimeError(
+                "NVLink supernode transport requires a common accessible CUDA IMEX channel"
+            )
+        return local_key, peer_key
+
     def _resolve_peer_resource_key(
         self,
         peer_alias: str,
@@ -1003,13 +1137,47 @@ class PeerAgent:
             "link_type": conn.local_key.link_type,
             "profile": conn.profile,
             "transport": conn.local_key.transport,
+            **(
+                {
+                    "src_device_index": conn.local_key.device_index,
+                    "cluster_uuid": conn.local_key.cluster_uuid,
+                    "clique_id": conn.local_key.clique_id,
+                }
+                if isinstance(conn.local_key, NvlinkResourceKey)
+                else {}
+            ),
         }
 
     def _ensure_connection_from_meta(
         self, peer_alias: str, meta: Dict[str, Any]
     ) -> DirectedConnection:
         """Create local connection state from a peer's directed request."""
-        if str(meta.get("transport") or "rdma").lower() == "tcp":
+        transport = str(meta.get("transport") or "rdma").lower()
+        if transport == "nvlink":
+            local_key = self._nvlink_resource_key(
+                self._local_resource, meta.get("dst_device")
+            )
+            peer_key = NvlinkResourceKey(
+                str(meta.get("src_device", "")).removeprefix("cuda:"),
+                int(meta.get("src_device_index", -1)),
+                str(meta.get("cluster_uuid", "")),
+                int(meta.get("clique_id", -1)),
+            )
+            if (local_key.cluster_uuid.lower(), local_key.clique_id) != (
+                peer_key.cluster_uuid.lower(),
+                peer_key.clique_id,
+            ):
+                raise RuntimeError(
+                    "Rejected NVLink rendezvous from a different MNNVL fabric"
+                )
+            return self._get_or_create_connection(
+                peer_alias,
+                local_key=local_key,
+                peer_key=peer_key,
+                qp_num=1,
+                profile=str(meta.get("profile") or "default"),
+            )
+        if transport == "tcp":
             with self._connections_lock:
                 peer_connections = [
                     conn
@@ -1082,6 +1250,8 @@ class PeerAgent:
 
         if isinstance(conn.local_key, TcpResourceKey):
             return self._ensure_local_tcp_endpoint(conn_id, conn)
+        if isinstance(conn.local_key, NvlinkResourceKey):
+            return self._ensure_local_nvlink_endpoint(conn_id, conn)
 
         _, pool = self._get_context_and_pool(conn.local_key)
         self._materialize_all_regions_for_key(conn.local_key)
@@ -1102,6 +1272,33 @@ class PeerAgent:
                 return existing
             self._endpoints[conn_id] = new_ep
             conn.attach_endpoint(new_ep, pool)
+            return new_ep
+
+    def _register_nvlink_region(self, endpoint, region: LogicalMemoryRegion) -> int:
+        owned = self._owned_memory_regions.get(region.name)
+        if owned is not None:
+            return endpoint.register_fabric_memory_region(owned[3], region.name)
+        return endpoint.register_memory_region(
+            region.ptr, region.offset, region.length, region.name
+        )
+
+    def _ensure_local_nvlink_endpoint(self, conn_id: str, conn: DirectedConnection):
+        if _NVLinkEndpoint is None:
+            raise RuntimeError(
+                "NVLink transport requested but dlslime was built without BUILD_NVLINK"
+            )
+        new_ep = _NVLinkEndpoint(conn.local_key.device_index)
+        with self._regions_lock:
+            regions = list(self._logical_regions.values())
+        for region in regions:
+            if region.dmabuf_fd is None:
+                self._register_nvlink_region(new_ep, region)
+        with self._endpoints_lock:
+            existing = self._endpoints.get(conn_id)
+            if existing is not None:
+                return existing
+            self._endpoints[conn_id] = new_ep
+            conn.attach_endpoint(new_ep, None)
             return new_ep
 
     def _ensure_local_tcp_endpoint(self, conn_id: str, conn: DirectedConnection):
@@ -1243,9 +1440,101 @@ class PeerAgent:
         with self._notified_peers_lock:
             self._notified_peers.discard(conn_id)
 
+    def _sync_connection_memory_regions(
+        self, conn_id: str, timeout_sec: float = 60.0
+    ) -> None:
+        """Synchronize MR metadata using the selected transport backend."""
+        if timeout_sec <= 0:
+            raise ValueError("timeout must be positive")
+        with self._connections_lock:
+            conn = self._connections.get(conn_id)
+        if conn is None:
+            raise RuntimeError("sync_memory_regions requires an existing connection")
+        if conn.transport == "rdma":
+            self._materialize_all_regions_for_key(conn.local_key)
+            self._publish_memory_keys()
+            return
+        endpoint = self._ensure_local_endpoint_created(conn_id)
+        local_key = (
+            f"{self._redis_prefix()}exchange:memory-regions:{conn.transport}:"
+            f"{self.alias}:{conn.peer_alias}:"
+            f"{conn.local_key.uuid}:{conn.peer_key.uuid}"
+        )
+        peer_key = (
+            f"{self._redis_prefix()}exchange:memory-regions:{conn.transport}:"
+            f"{conn.peer_alias}:{self.alias}:"
+            f"{conn.peer_key.uuid}:{conn.local_key.uuid}"
+        )
+        ttl = max(1, int(timeout_sec) + 5)
+        self._redis_client.set(
+            local_key, json.dumps(endpoint.endpoint_info(), default=str), ex=ttl
+        )
+        deadline = time.monotonic() + timeout_sec
+        while True:
+            encoded = self._redis_client.get(peer_key)
+            if encoded:
+                peer_info = json.loads(encoded)
+                endpoint.connect(peer_info)
+                conn.peer_endpoint_info = peer_info
+                self._redis_client.delete(peer_key)
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(
+                    f"Timeout waiting for memory-region metadata from "
+                    f"{conn.peer_alias!r}"
+                )
+            time.sleep(min(0.05, remaining))
+
     # ------------------------------------------------------------------
-    # Topology
+    # Topology and transport-owned memory
     # ------------------------------------------------------------------
+    def allocate_memory_region(
+        self,
+        name: str,
+        length: int,
+        *,
+        memory_kind: str = "cuda_fabric",
+        local_device: Optional[str] = None,
+    ) -> PeerMemoryRegion:
+        """Allocate a PeerAgent-owned exportable CUDA memory region."""
+        if memory_kind != "cuda_fabric":
+            raise ValueError("memory_kind must be cuda_fabric")
+        if not name or int(length) <= 0:
+            raise ValueError("name must be non-empty and length must be positive")
+        if _NVLinkEndpoint is None:
+            raise RuntimeError("CUDA Fabric allocation requires BUILD_NVLINK")
+        key = self._nvlink_resource_key(self._local_resource, local_device)
+        with self._regions_lock:
+            if name in self._logical_regions or name in self._owned_memory_regions:
+                raise ValueError(f"Memory region {name!r} is already registered")
+        allocator = self._fabric_allocators.get(key)
+        if allocator is None:
+            allocator = _NVLinkEndpoint(key.device_index)
+            self._fabric_allocators[key] = allocator
+        info = dict(allocator.allocate_fabric_memory_region(int(length), name))
+        handle = int(info["handle"])
+        fabric_info = dict(allocator.mr_info()[name])
+        self._owned_memory_regions[name] = (key, allocator, handle, fabric_info)
+        try:
+            self.register_memory_region(name, int(info["ptr"]), 0, int(length))
+        except Exception:
+            self._owned_memory_regions.pop(name, None)
+            allocator.unregister_memory_region(handle)
+            raise
+        return PeerMemoryRegion(self, name, info, key.device)
+
+    def _release_owned_memory_region(self, name: str) -> bool:
+        owned = self._owned_memory_regions.pop(name, None)
+        if owned is None:
+            return False
+        _key, allocator, handle, _fabric_info = owned
+        self.unregister_memory_region(name)
+        rc = allocator.unregister_memory_region(handle)
+        if rc != 0:
+            raise RuntimeError(f"Failed to release owned memory region {name!r}: {rc}")
+        return True
+
     def connect_to(
         self,
         peer_alias: str,
@@ -1277,10 +1566,10 @@ class PeerAgent:
             )
 
         transport_norm = (transport or "rdma").lower()
-        if transport_norm not in ("rdma", "tcp"):
+        if transport_norm not in ("rdma", "tcp", "nvlink"):
             raise ValueError(
                 f"connect_to: unsupported transport {transport!r} "
-                "(expected 'rdma' or 'tcp')"
+                "(expected 'rdma', 'tcp', or 'nvlink')"
             )
 
         _tlog(f"{self.alias}: connect_to({peer_alias}) ENTER")
@@ -1294,6 +1583,10 @@ class PeerAgent:
             # Peer host/port don't matter for the resource key — the rendezvous
             # passes the peer's TcpEndpoint.endpoint_info() JSON to connect().
             peer_key: ResourceKey = TcpResourceKey()
+        elif transport_norm == "nvlink":
+            local_key, peer_key = self._resolve_nvlink_keys(
+                peer_alias, local_device, peer_device
+            )
         else:
             local_key = self._first_usable_resource_key(
                 self._local_resource,
@@ -1417,20 +1710,29 @@ class PeerAgent:
         with self._regions_lock:
             self._logical_regions[mr_name] = region
 
-        # Eagerly register on any existing TCP endpoints so handshake-time
-        # endpoint_info() carries the MR. Idempotent on the C++ side.
+        # Replay onto endpoint-owned pools (TCP and NVLink) so endpoint_info()
+        # contains the MR during the rendezvous handshake.
         with self._endpoints_lock:
-            tcp_endpoints = [
-                ep
-                for ep in self._endpoints.values()
-                if _TcpEndpoint is not None and isinstance(ep, _TcpEndpoint)
+            endpoints = list(self._endpoints.items())
+        with self._connections_lock:
+            endpoint_connections = [
+                (self._connections.get(cid), ep) for cid, ep in endpoints
             ]
-        for ep in tcp_endpoints:
+        nvlink_handle = None
+        for endpoint_conn, ep in endpoint_connections:
+            if endpoint_conn is None or endpoint_conn.transport not in {
+                "tcp",
+                "nvlink",
+            }:
+                continue
             try:
-                ep.register_memory_region(mr_name, ptr, offset, length)
+                if endpoint_conn.transport == "nvlink":
+                    nvlink_handle = self._register_nvlink_region(ep, region)
+                else:
+                    ep.register_memory_region(mr_name, ptr, offset, length)
             except Exception as e:
                 logger.warning(
-                    "PeerAgent %s: TCP MR replay for %s failed: %s",
+                    "PeerAgent %s: endpoint MR replay for %s failed: %s",
                     self.alias,
                     mr_name,
                     e,
@@ -1440,8 +1742,8 @@ class PeerAgent:
         # build or TCP-only deployment), skip materialization. Callers using
         # one-sided ops should fetch handles from the connection endpoint.
         key = self._default_local_resource_key()
-        if isinstance(key, TcpResourceKey):
-            return 0
+        if isinstance(key, (TcpResourceKey, NvlinkResourceKey)):
+            return int(nvlink_handle or 0)
 
         materialized = self._materialize_region(mr_name, key)
         self._publish_memory_keys()
@@ -1939,9 +2241,32 @@ class PeerAgent:
     def _maybe_endpoint_assign(
         self, conn: DirectedConnection, endpoint: RDMAEndpoint, assign
     ):
-        if self._is_named_io_batch(assign):
+        if not self._is_named_io_batch(assign):
+            return assign
+        if conn.transport != "nvlink":
             return self._endpoint_assign(conn, endpoint, assign)
-        return assign
+        # NVLink has a native name-based overload whose tuple stores remote
+        # offset before local offset. Keep PeerAgent public tuples canonical.
+        converted = []
+        for item in self._iter_named_io_assign(assign):
+            if len(item) == 4:
+                region, local_offset, remote_offset, length = item
+                remote_region = region
+                local_region = region
+            elif len(item) == 5:
+                local_region, remote_region, local_offset, remote_offset, length = item
+            else:
+                raise TypeError("named assignment must contain 4 or 5 items")
+            converted.append(
+                (
+                    str(local_region),
+                    str(remote_region),
+                    int(remote_offset),
+                    int(local_offset),
+                    int(length),
+                )
+            )
+        return converted
 
     # One-shot I/O forwarders. Named batches use PeerAgent memory-key
     # resolution; numeric assignments are passed through to the raw endpoint.
@@ -2145,6 +2470,19 @@ class PeerAgent:
             logger.info("PeerAgent %s: Cleanup OK", self.alias)
         except Exception as e:
             logger.warning("PeerAgent %s: Cleanup API warning: %s", self.alias, e)
+
+        # Release PeerAgent-owned Fabric mappings after per-peer endpoints.
+        for owned_name in list(self._owned_memory_regions):
+            try:
+                self._release_owned_memory_region(owned_name)
+            except Exception as e:
+                logger.warning(
+                    "PeerAgent %s: owned region cleanup warning for %s: %s",
+                    self.alias,
+                    owned_name,
+                    e,
+                )
+        self._fabric_allocators.clear()
 
         with self._regions_lock:
             owned_dmabuf_fds = [

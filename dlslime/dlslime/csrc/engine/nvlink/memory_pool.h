@@ -14,18 +14,31 @@ namespace dlslime {
 using json = nlohmann::json;
 
 typedef struct nvlink_mr {
-    uintptr_t          addr;
-    uint64_t           offset;
-    size_t             length;
-    cudaIpcMemHandle_t ipc_handle;
+    uintptr_t                    addr;
+    uint64_t                     offset;
+    size_t                       length;
+    cudaIpcMemHandle_t           ipc_handle{};
+    CUmemFabricHandle            fabric_handle{};
+    CUmemGenericAllocationHandle allocation_handle{};
+    size_t                       allocation_size{0};
+    bool                         fabric{false};
+    bool                         owns_allocation{false};
+    bool                         retains_allocation{false};
 
     const json json_info(const std::string& name) const
     {
         json mr_info;
-        mr_info["name"]       = name;
-        mr_info["addr"]       = addr;
-        mr_info["offset"]     = offset;
-        mr_info["length"]     = length;
+        mr_info["name"]        = name;
+        mr_info["addr"]        = addr;
+        mr_info["offset"]      = offset;
+        mr_info["length"]      = length;
+        mr_info["handle_type"] = fabric ? "fabric" : "cuda_ipc";
+        if (fabric) {
+            mr_info["allocation_size"] = allocation_size;
+            mr_info["fabric_handle"] =
+                std::vector<unsigned char>(fabric_handle.data, fabric_handle.data + CU_IPC_HANDLE_SIZE);
+            return mr_info;
+        }
         mr_info["ipc_handle"] = std::vector<char>{};
         for (int i = 0; i < CUDA_IPC_HANDLE_SIZE; i++)
             mr_info["ipc_handle"][i] = ipc_handle.reserved[i];
@@ -36,12 +49,16 @@ typedef struct nvlink_mr {
 
 class NVLinkMemoryPool {
 public:
-    NVLinkMemoryPool() = default;
+    explicit NVLinkMemoryPool(int device_index = -1): device_index_(device_index) {}
+    ~NVLinkMemoryPool();
+
+    json allocate_fabric_memory_region(size_t length, std::optional<std::string> name = std::nullopt);
 
     int32_t register_memory_region(uintptr_t                  addr,
                                    uint64_t                   offset,
                                    size_t                     length,
                                    std::optional<std::string> name = std::nullopt);
+    int32_t register_fabric_memory_region(const json& mr_info, std::optional<std::string> name = std::nullopt);
     int32_t unregister_memory_region(int32_t handle);
 
     int32_t register_remote_memory_region(const json& mr_info, std::optional<std::string> name = std::nullopt);
@@ -71,6 +88,7 @@ public:
     const json remote_mr_info() const;
 
 private:
+    int                                      active_device();
     std::unordered_map<std::string, int32_t> name_to_handle_;
     std::unordered_map<uintptr_t, int32_t>   ptr_to_handle_;
     std::vector<nvlink_mr_t>                 handle_to_mr_;
@@ -79,5 +97,6 @@ private:
     std::unordered_map<std::string, int32_t> remote_name_to_handle_;
     std::vector<nvlink_mr_t>                 remote_handle_to_mr_;
     std::vector<std::string>                 remote_handle_to_name_;
+    int                                      device_index_{-1};
 };
 }  // namespace dlslime

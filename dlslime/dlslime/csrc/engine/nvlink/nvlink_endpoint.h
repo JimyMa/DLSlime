@@ -16,11 +16,13 @@ namespace dlslime {
 
 class NVLinkEndpoint {
 public:
-    NVLinkEndpoint() = default;
+    explicit NVLinkEndpoint(int device_index = -1): device_index_(device_index), memory_pool_(device_index) {}
 
     /* Async NVLink Read (handle-based fast path) */
     std::shared_ptr<NVLinkFuture> read(std::vector<assign_tuple_t>& assign, void* stream_handle = nullptr)
     {
+        if (device_index_ >= 0)
+            CUDACHECK(cudaSetDevice(device_index_));
         cudaStream_t stream = (cudaStream_t)stream_handle;
 
         for (size_t bid = 0; bid < assign.size(); ++bid) {
@@ -43,7 +45,7 @@ public:
                             cudaMemcpyDeviceToDevice,
                             stream);
         }
-        return std::make_shared<NVLinkFuture>();
+        return std::make_shared<NVLinkFuture>(stream);
     }
 
     /* Async NVLink Read (name-based, resolves to handles) */
@@ -70,7 +72,72 @@ public:
         return read(resolved, stream_handle);
     }
 
+    /* Async NVLink Write (handle-based fast path) */
+    std::shared_ptr<NVLinkFuture> write(std::vector<assign_tuple_t>& assign, void* stream_handle = nullptr)
+    {
+        if (device_index_ >= 0)
+            CUDACHECK(cudaSetDevice(device_index_));
+        cudaStream_t stream = (cudaStream_t)stream_handle;
+
+        for (size_t bid = 0; bid < assign.size(); ++bid) {
+            auto local_handle  = static_cast<int32_t>(std::get<0>(assign[bid]));
+            auto remote_handle = static_cast<int32_t>(std::get<1>(assign[bid]));
+
+            auto remote_offset = std::get<2>(assign[bid]);
+            auto local_offset  = std::get<3>(assign[bid]);
+            auto length        = std::get<4>(assign[bid]);
+
+            nvlink_mr_t local_mr  = memory_pool_.get_mr_fast(local_handle);
+            nvlink_mr_t remote_mr = memory_pool_.get_remote_mr_fast(remote_handle);
+
+            CUDACHECK(cudaMemcpyAsync((char*)(remote_mr.addr + remote_offset),
+                                      (char*)(local_mr.addr + local_offset),
+                                      length,
+                                      cudaMemcpyDeviceToDevice,
+                                      stream));
+        }
+        return std::make_shared<NVLinkFuture>(stream);
+    }
+
+    /* Async NVLink Write (name-based, resolves to handles) */
+    std::shared_ptr<NVLinkFuture> write(std::vector<named_assign_tuple_t>& named_assign, void* stream_handle = nullptr)
+    {
+        std::vector<assign_tuple_t> resolved;
+        resolved.reserve(named_assign.size());
+
+        for (auto& na : named_assign) {
+            int32_t local_handle  = memory_pool_.get_mr_handle(std::get<0>(na));
+            int32_t remote_handle = memory_pool_.get_remote_mr_handle(std::get<1>(na));
+
+            if (local_handle < 0 || remote_handle < 0) {
+                SLIME_LOG_ERROR("Named write: MR not found, local=", std::get<0>(na), " remote=", std::get<1>(na));
+                return nullptr;
+            }
+
+            resolved.emplace_back(static_cast<uintptr_t>(local_handle),
+                                  static_cast<uintptr_t>(remote_handle),
+                                  std::get<2>(na),
+                                  std::get<3>(na),
+                                  std::get<4>(na));
+        }
+        return write(resolved, stream_handle);
+    }
+
     /* Memory Management */
+    json allocate_fabric_memory_region(size_t length, std::optional<std::string> name = std::nullopt)
+    {
+        return memory_pool_.allocate_fabric_memory_region(length, name);
+    }
+
+    int32_t unregister_memory_region(int32_t handle)
+    {
+        return memory_pool_.unregister_memory_region(handle);
+    }
+
+    int32_t register_fabric_memory_region(const json& mr_info, std::optional<std::string> name = std::nullopt)
+    {
+        return memory_pool_.register_fabric_memory_region(mr_info, name);
+    }
     int32_t register_memory_region(uintptr_t                  addr,
                                    uint64_t                   offset,
                                    size_t                     length,
@@ -104,6 +171,11 @@ public:
         return memory_pool_.mr_info();
     }
 
+    const json remote_mr_info()
+    {
+        return memory_pool_.remote_mr_info();
+    }
+
     int connect(const json& endpoint_info_json)
     {
         for (auto& item : endpoint_info_json["mr_info"].items()) {
@@ -113,6 +185,7 @@ public:
     }
 
 private:
+    int              device_index_{-1};
     NVLinkMemoryPool memory_pool_;
 };
 }  // namespace dlslime

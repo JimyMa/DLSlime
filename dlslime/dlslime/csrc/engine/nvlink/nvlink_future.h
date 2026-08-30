@@ -1,25 +1,35 @@
 #pragma once
 #include <cstdint>
 
+#include "cuda_common.cuh"
 #include "dlslime/csrc/device/device_future.h"
 
 namespace dlslime {
 
-/**
- * @brief Future for NVLink operations
- *
- * Inherits from DeviceFuture for interface consistency.
- * NVLink operations complete synchronously via cudaMemcpyAsync,
- * so wait() is a no-op (stream synchronization happens externally).
- */
+/** Future for one or more NVLink copies recorded on a CUDA stream. */
 class NVLinkFuture: public DeviceFuture {
 public:
-    NVLinkFuture()  = default;
-    ~NVLinkFuture() = default;
+    explicit NVLinkFuture(cudaStream_t stream)
+    {
+        CUDACHECK(cudaEventCreateWithFlags(&event_, cudaEventDisableTiming));
+        CUDACHECK(cudaEventRecord(event_, stream));
+    }
+
+    ~NVLinkFuture() override
+    {
+        if (event_ != nullptr)
+            cudaEventDestroy(event_);
+    }
+
+    NVLinkFuture(const NVLinkFuture&)            = delete;
+    NVLinkFuture& operator=(const NVLinkFuture&) = delete;
 
     int32_t wait() const override
     {
-        return 0;
+        return static_cast<int32_t>(cudaEventSynchronize(event_));
     }
+
+private:
+    cudaEvent_t event_{nullptr};
 };
 }  // namespace dlslime

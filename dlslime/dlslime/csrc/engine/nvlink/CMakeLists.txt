@@ -11,7 +11,7 @@ add_library(
     nvlink_endpoint.cpp
 )
 
-target_link_libraries(_slime_nvlink PUBLIC CUDA::cudart)
+target_link_libraries(_slime_nvlink PUBLIC CUDA::cudart CUDA::cuda_driver)
 
 set_target_properties(
     _slime_nvlink

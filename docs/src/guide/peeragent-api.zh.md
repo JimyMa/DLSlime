@@ -40,7 +40,9 @@ conn.wait(timeout=60)
 ### 选择传输层
 
 兼容旧行为时可继续使用 `transport="rdma"`。跨节点 MNNVL CUDA Fabric
-连接显式使用 `transport="nvlink"`；TCP 同样必须显式请求。
+连接可显式使用 `transport="nvlink"`。部署代码也可使用 `transport="auto"`：
+MNNVL membership 匹配且存在共同 IMEX channel 时选择 NVLink，否则选择兼容
+RDMA，再不可用则失败。`auto` 不会静默回退 TCP，TCP 必须显式请求。
 
 ```python
 region = agent.allocate_memory_region("kv", 64 * 1024 * 1024)
@@ -48,6 +50,10 @@ conn = agent.connect_to("worker-b", transport="nvlink")
 conn.sync_memory_regions(timeout=60)
 conn.wait(timeout=60)
 assert conn.transport == "nvlink"
+assert conn.selection_reason == "explicit_request"
+
+auto_conn = agent.connect_to("worker-c", transport="auto")
+assert auto_conn.selection_reason == "matching_mnnvl_fabric"
 ```
 
 `local_device` 和 `peer_device` 可使用进程可见 CUDA ordinal、GPU UUID 或

@@ -105,6 +105,12 @@ def main():
         "--peer_device",
         help="Peer CUDA index, GPU UUID, or cuda:GPU-...; default: first MNNVL GPU",
     )
+    parser.add_argument(
+        "--transport",
+        choices=("auto", "nvlink"),
+        default="auto",
+        help="PeerAgent transport policy; default: auto",
+    )
     parser.add_argument("--connect_timeout", type=float, default=120.0)
     parser.add_argument(
         "--payload_hold_seconds",
@@ -142,7 +148,7 @@ def main():
             flush=True,
         )
         print(
-            f"[{alias}] connecting to {peer_alias} with transport=nvlink ...",
+            f"[{alias}] connecting to {peer_alias} with transport={args.transport} ...",
             flush=True,
         )
         region = agent.allocate_memory_region(
@@ -151,7 +157,7 @@ def main():
         local_ptr = region.ptr
         conn = agent.connect_to(
             peer_alias,
-            transport="nvlink",
+            transport=args.transport,
             local_device=args.local_device,
             peer_device=args.peer_device,
         )
@@ -164,9 +170,13 @@ def main():
         print(
             f"[{alias}] {conn.transport} link established: "
             f"{conn.local_nic} -> {peer_alias}:{conn.remote_nic}; "
-            f"state={conn.state}",
+            f"state={conn.state}; reason={conn.selection_reason}",
             flush=True,
         )
+        if args.transport == "auto" and conn.transport != "nvlink":
+            raise RuntimeError(
+                f"Expected auto policy to select nvlink, got {conn.transport}"
+            )
         if args.role == "initiator":
             agent.read(peer_alias, [("payload", "payload", 0, 0, PAYLOAD_SIZE)]).wait()
             payload = cuda.to_host(local_ptr, PAYLOAD_SIZE)

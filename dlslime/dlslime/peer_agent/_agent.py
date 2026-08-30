@@ -1022,9 +1022,15 @@ class PeerAgent:
         peer_imex = (
             (peer_resource.get("runtime_capabilities") or {}).get("cuda") or {}
         ).get("imex") or {}
-        if not local_imex.get("available") or not peer_imex.get("available"):
+        local_channels = set(local_imex.get("channel_ids") or [])
+        peer_channels = set(peer_imex.get("channel_ids") or [])
+        if (
+            not local_imex.get("available")
+            or not peer_imex.get("available")
+            or not local_channels.intersection(peer_channels)
+        ):
             raise RuntimeError(
-                "NVLink supernode transport requires an accessible CUDA IMEX channel on both peers"
+                "NVLink supernode transport requires a common accessible CUDA IMEX channel"
             )
         return local_key, peer_key
 

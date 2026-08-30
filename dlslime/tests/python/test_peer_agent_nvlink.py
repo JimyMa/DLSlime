@@ -3,7 +3,11 @@ import pytest
 from dlslime.peer_agent._agent import PeerAgent
 
 
-def _mnnvl_resource(cluster="fabric-a", clique=7, uuid="GPU-a", imex=True):
+def _mnnvl_resource(
+    cluster="fabric-a", clique=7, uuid="GPU-a", imex=True, channels=None
+):
+    if channels is None:
+        channels = [0]
     return {
         "accelerators": [
             {
@@ -16,7 +20,9 @@ def _mnnvl_resource(cluster="fabric-a", clique=7, uuid="GPU-a", imex=True):
                 },
             }
         ],
-        "runtime_capabilities": {"cuda": {"imex": {"available": imex}}},
+        "runtime_capabilities": {
+            "cuda": {"imex": {"available": imex, "channel_ids": channels}}
+        },
     }
 
 
@@ -52,6 +58,16 @@ def test_peer_agent_requires_imex_for_nvlink_supernode():
     agent.get_resource = lambda alias: _mnnvl_resource()
 
     with pytest.raises(RuntimeError, match="IMEX channel"):
+        agent._resolve_nvlink_keys("peer", None, None)
+
+
+def test_peer_agent_requires_common_imex_channel():
+    agent = object.__new__(PeerAgent)
+    agent._shutdown_called = True
+    agent._local_resource = _mnnvl_resource(channels=[0])
+    agent.get_resource = lambda alias: _mnnvl_resource(channels=[1])
+
+    with pytest.raises(RuntimeError, match="common accessible CUDA IMEX channel"):
         agent._resolve_nvlink_keys("peer", None, None)
 
 

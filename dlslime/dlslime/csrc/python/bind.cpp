@@ -452,7 +452,23 @@ PYBIND11_MODULE(_slime_c, m)
     py::class_<dlslime::NVLinkFuture, std::shared_ptr<dlslime::NVLinkFuture>>(m, "SlimeNVLinkFuture")
         .def("wait", &dlslime::NVLinkFuture::wait, py::call_guard<py::gil_scoped_release>());
     py::class_<dlslime::NVLinkEndpoint>(m, "NVLinkEndpoint")
-        .def(py::init<>())
+        .def(py::init<int>(), py::arg("device_index") = -1)
+        .def(
+            "allocate_fabric_memory_region",
+            [](dlslime::NVLinkEndpoint& self, size_t length, py::object name_obj) {
+                std::optional<std::string> name = std::nullopt;
+                if (name_obj.is_none() == false) {
+                    name = name_obj.cast<std::string>();
+                }
+                return self.allocate_fabric_memory_region(length, name);
+            },
+            py::arg("length"),
+            py::arg("name") = py::none(),
+            py::call_guard<py::gil_scoped_release>())
+        .def("unregister_memory_region",
+             &dlslime::NVLinkEndpoint::unregister_memory_region,
+             py::arg("handle"),
+             py::call_guard<py::gil_scoped_release>())
         .def(
             "register_memory_region",
             [](dlslime::NVLinkEndpoint& self, uintptr_t addr, uint64_t offset, size_t length, py::object name_obj) {
@@ -467,6 +483,16 @@ PYBIND11_MODULE(_slime_c, m)
             py::arg("length"),
             py::arg("name") = py::none(),
             py::call_guard<py::gil_scoped_release>())
+        .def(
+            "register_fabric_memory_region",
+            [](dlslime::NVLinkEndpoint& self, const json& mr_info, py::object name_obj) {
+                std::optional<std::string> name = std::nullopt;
+                if (!name_obj.is_none())
+                    name = name_obj.cast<std::string>();
+                return self.register_fabric_memory_region(mr_info, name);
+            },
+            py::arg("mr_info"),
+            py::arg("name") = py::none())
         .def(
             "register_remote_memory_region",
             [](dlslime::NVLinkEndpoint& self, const json& mr_info, py::object name_obj) {
@@ -483,6 +509,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("get_remote_mr_handle", &dlslime::NVLinkEndpoint::get_remote_mr_handle, py::arg("name"))
         .def("endpoint_info", &dlslime::NVLinkEndpoint::endpoint_info)
         .def("mr_info", &dlslime::NVLinkEndpoint::mr_info)
+        .def("remote_mr_info", &dlslime::NVLinkEndpoint::remote_mr_info)
         .def("connect", &dlslime::NVLinkEndpoint::connect)
         .def("read",
              static_cast<std::shared_ptr<dlslime::NVLinkFuture> (dlslime::NVLinkEndpoint::*)(
@@ -493,6 +520,18 @@ PYBIND11_MODULE(_slime_c, m)
         .def("read",
              static_cast<std::shared_ptr<dlslime::NVLinkFuture> (dlslime::NVLinkEndpoint::*)(
                  std::vector<dlslime::assign_tuple_t>&, void*)>(&dlslime::NVLinkEndpoint::read),
+             py::arg("assign"),
+             py::arg("stream") = nullptr,
+             py::call_guard<py::gil_scoped_release>())
+        .def("write",
+             static_cast<std::shared_ptr<dlslime::NVLinkFuture> (dlslime::NVLinkEndpoint::*)(
+                 std::vector<dlslime::named_assign_tuple_t>&, void*)>(&dlslime::NVLinkEndpoint::write),
+             py::arg("assign"),
+             py::arg("stream") = nullptr,
+             py::call_guard<py::gil_scoped_release>())
+        .def("write",
+             static_cast<std::shared_ptr<dlslime::NVLinkFuture> (dlslime::NVLinkEndpoint::*)(
+                 std::vector<dlslime::assign_tuple_t>&, void*)>(&dlslime::NVLinkEndpoint::write),
              py::arg("assign"),
              py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>());

@@ -28,6 +28,11 @@ if(BUILD_TOPO_SYSFS)
     target_link_libraries(_slime_topology PUBLIC _slime_topo_sysfs)
 endif()
 
+if(BUILD_TOPO_CUDA)
+    target_compile_definitions(_slime_topology PRIVATE SLIME_TOPO_HAS_CUDA)
+    target_link_libraries(_slime_topology PUBLIC _slime_topo_cuda)
+endif()
+
 add_library(dlslime INTERFACE)
 target_link_libraries(dlslime INTERFACE _slime_engine _slime_device _slime_topology _slime_obs)
 

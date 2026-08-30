@@ -9,6 +9,7 @@ If it reports `cuda=NOT_BUILT`, rebuild the Python package from the repository r
 - `nvlink_links` records physical NVML link slots; a remote switch denotes NVSwitch and is not a peer GPU identity.
 - `mnnvl.membership_ready` requires a non-zero cluster UUID, a local clique ID, completed/successful registration, and healthy status. It is not data-plane readiness.
   Peer compatibility additionally requires matching cluster UUID and clique ID.
+- Schedulers should treat `(cluster_uuid, clique_id)` as the NVLink Fabric placement domain. Service registration may publish `<cluster_uuid>:<clique_id>` as `fabric_domain_id`; peers from disjoint domains must not be paired for NVLink transfers.
 - `runtime_capabilities.cuda.imex` reports host-visible readable IMEX channel nodes independently. Endpoint setup must still validate handle export/import.
 - `unified_addressing` and `cuda_fabric_handle` are CUDA attributes; neither claims that CUDA IPC or an MNNVL transfer works.
 - `nvml_scope: "parent"` means UUID lookup failed and NVML facts came from the PCI parent, such as for a MIG-visible device.

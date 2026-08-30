@@ -206,6 +206,7 @@ class DirectedConnection:
         peer_key: ResourceKey,
         qp_num: int,
         profile: str = "default",
+        selection_reason: str = "peer_selected",
     ) -> None:
         self._agent = agent
         self.peer_alias = peer_alias
@@ -213,6 +214,7 @@ class DirectedConnection:
         self.peer_key = peer_key
         self.qp_num = qp_num
         self.profile = profile
+        self.selection_reason = selection_reason
         self.endpoint: Optional[Any] = None
         self.memory_pool: Optional[RDMAMemoryPool] = None
         self.state = "connecting"
@@ -272,6 +274,11 @@ class PeerConnection:
     def transport(self) -> str:
         """Return the selected transport name."""
         return self._connection().transport
+
+    @property
+    def selection_reason(self) -> str:
+        """Return why this transport was selected."""
+        return self._connection().selection_reason
 
     def wait(self, timeout: float = 60.0) -> "PeerConnection":
         """Block until this peer connection is ready."""
@@ -1072,6 +1079,7 @@ class PeerAgent:
         peer_key: Optional[ResourceKey] = None,
         qp_num: Optional[int] = None,
         profile: str = "default",
+        selection_reason: str = "peer_selected",
     ) -> DirectedConnection:
         with self._connections_lock:
             peer_connections = [
@@ -1111,6 +1119,8 @@ class PeerAgent:
                             f"Connection {conn.conn_id} already exists with "
                             f"qp_num={conn.qp_num}, not {qp_num}."
                         )
+                    if selection_reason != "peer_selected":
+                        conn.selection_reason = selection_reason
                     return conn
             conn = DirectedConnection(
                 self,
@@ -1119,6 +1129,7 @@ class PeerAgent:
                 peer_key,
                 qp_num or 1,
                 profile=profile,
+                selection_reason=selection_reason,
             )
             self._connections[conn.conn_id] = conn
             return conn
@@ -1535,6 +1546,52 @@ class PeerAgent:
             raise RuntimeError(f"Failed to release owned memory region {name!r}: {rc}")
         return True
 
+    def _auto_transport_keys(
+        self,
+        peer_alias: str,
+        local_device: Optional[str],
+        peer_device: Optional[str],
+        ib_port: Optional[int],
+    ) -> Tuple[str, ResourceKey, ResourceKey, str]:
+        peer_resource = self.get_resource(peer_alias)
+        if peer_resource is None:
+            raise RuntimeError(f"Peer {peer_alias!r} has not published its topology")
+
+        nvlink_error: Optional[Exception] = None
+        if _NVLinkEndpoint is not None:
+            try:
+                local_key, peer_key = self._resolve_nvlink_keys(
+                    peer_alias, local_device, peer_device
+                )
+                return (
+                    "nvlink",
+                    local_key,
+                    peer_key,
+                    "matching_mnnvl_fabric",
+                )
+            except RuntimeError as exc:
+                nvlink_error = exc
+        else:
+            nvlink_error = RuntimeError("NVLink provider is not built")
+
+        try:
+            local_key = self._first_usable_resource_key(
+                self._local_resource, device=local_device, ib_port=ib_port
+            )
+            peer_key = self._first_usable_resource_key(
+                peer_resource,
+                device=peer_device,
+                ib_port=ib_port,
+                link_type=local_key.link_type,
+            )
+        except RuntimeError as rdma_error:
+            raise RuntimeError(
+                f"No compatible NVLink or RDMA transport for peer {peer_alias!r}; "
+                "TCP fallback is disabled for transport=auto and must be "
+                f"requested explicitly (NVLink: {nvlink_error}; RDMA: {rdma_error})"
+            ) from rdma_error
+        return "rdma", local_key, peer_key, "compatible_rdma_fallback"
+
     def connect_to(
         self,
         peer_alias: str,
@@ -1566,16 +1623,26 @@ class PeerAgent:
             )
 
         transport_norm = (transport or "rdma").lower()
-        if transport_norm not in ("rdma", "tcp", "nvlink"):
+        if transport_norm not in ("auto", "rdma", "tcp", "nvlink"):
             raise ValueError(
                 f"connect_to: unsupported transport {transport!r} "
-                "(expected 'rdma', 'tcp', or 'nvlink')"
+                "(expected 'auto', 'rdma', 'tcp', or 'nvlink')"
             )
 
         _tlog(f"{self.alias}: connect_to({peer_alias}) ENTER")
         t0 = time.perf_counter()
 
-        if transport_norm == "tcp":
+        selection_reason = "explicit_request"
+        if transport_norm == "auto":
+            (
+                transport_norm,
+                local_key,
+                peer_key,
+                selection_reason,
+            ) = self._auto_transport_keys(
+                peer_alias, local_device, peer_device, ib_port
+            )
+        elif transport_norm == "tcp":
             local_host = self._resolve_tcp_local_host(local_host)
             local_key: ResourceKey = TcpResourceKey(
                 host=local_host, port=int(local_port)
@@ -1613,6 +1680,7 @@ class PeerAgent:
             local_key=local_key,
             peer_key=peer_key,
             qp_num=qp_num or 1,
+            selection_reason=selection_reason,
         )
 
         # Pre-create the local endpoint asynchronously. DirectedConnection is

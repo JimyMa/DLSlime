@@ -1,6 +1,12 @@
 import pytest
 
-from dlslime.peer_agent._agent import PeerAgent
+from dlslime.peer_agent._agent import (
+    DirectedConnection,
+    NvlinkResourceKey,
+    PeerAgent,
+    PeerConnection,
+    RdmaResourceKey,
+)
 
 
 def _mnnvl_resource(
@@ -171,3 +177,126 @@ def test_nvlink_named_assignments_keep_public_offset_order():
     )
 
     assert converted == [("local", "remote", 22, 11, 33)]
+
+
+def _auto_agent(local_resource, peer_resource):
+    agent = object.__new__(PeerAgent)
+    agent._shutdown_called = True
+    agent.alias = "local"
+    agent._local_resource = local_resource
+    agent.get_resource = lambda alias: peer_resource
+    return agent
+
+
+def _rdma_selector(local_resource):
+    def select(resource, **kwargs):
+        device = "local_nic" if resource is local_resource else "peer_nic"
+        return RdmaResourceKey(device, 1, "IB")
+
+    return select
+
+
+def test_auto_selects_matching_mnnvl_fabric(monkeypatch):
+    from dlslime.peer_agent import _agent as peer_agent_mod
+
+    local = _mnnvl_resource(uuid="GPU-local")
+    agent = _auto_agent(local, _mnnvl_resource(uuid="GPU-peer"))
+    monkeypatch.setattr(peer_agent_mod, "_NVLinkEndpoint", object)
+
+    transport, local_key, peer_key, reason = agent._auto_transport_keys(
+        "peer", None, None, 1
+    )
+
+    assert transport == "nvlink"
+    assert isinstance(local_key, NvlinkResourceKey)
+    assert isinstance(peer_key, NvlinkResourceKey)
+    assert reason == "matching_mnnvl_fabric"
+
+
+def test_auto_falls_back_to_rdma_across_mnnvl_domains(monkeypatch):
+    from dlslime.peer_agent import _agent as peer_agent_mod
+
+    local = _mnnvl_resource(clique=1)
+    agent = _auto_agent(local, _mnnvl_resource(clique=2))
+    agent._first_usable_resource_key = _rdma_selector(local)
+    monkeypatch.setattr(peer_agent_mod, "_NVLinkEndpoint", object)
+
+    transport, local_key, peer_key, reason = agent._auto_transport_keys(
+        "peer", None, None, 1
+    )
+
+    assert transport == "rdma"
+    assert local_key.device == "local_nic"
+    assert peer_key.device == "peer_nic"
+    assert reason == "compatible_rdma_fallback"
+
+
+def test_auto_falls_back_to_rdma_when_nvlink_is_not_built(monkeypatch):
+    from dlslime.peer_agent import _agent as peer_agent_mod
+
+    local = _mnnvl_resource()
+    agent = _auto_agent(local, _mnnvl_resource(uuid="GPU-peer"))
+    agent._first_usable_resource_key = _rdma_selector(local)
+    monkeypatch.setattr(peer_agent_mod, "_NVLinkEndpoint", None)
+
+    transport, _local_key, _peer_key, reason = agent._auto_transport_keys(
+        "peer", None, None, 1
+    )
+
+    assert transport == "rdma"
+    assert reason == "compatible_rdma_fallback"
+
+
+def test_auto_falls_back_to_rdma_without_common_imex(monkeypatch):
+    from dlslime.peer_agent import _agent as peer_agent_mod
+
+    local = _mnnvl_resource(channels=[0])
+    agent = _auto_agent(local, _mnnvl_resource(uuid="GPU-peer", channels=[1]))
+    agent._first_usable_resource_key = _rdma_selector(local)
+    monkeypatch.setattr(peer_agent_mod, "_NVLinkEndpoint", object)
+
+    transport, _local_key, _peer_key, reason = agent._auto_transport_keys(
+        "peer", None, None, 1
+    )
+
+    assert transport == "rdma"
+    assert reason == "compatible_rdma_fallback"
+
+
+def test_auto_never_silently_falls_back_to_tcp(monkeypatch):
+    from dlslime.peer_agent import _agent as peer_agent_mod
+
+    local = _mnnvl_resource(clique=1)
+    agent = _auto_agent(local, _mnnvl_resource(clique=2))
+    agent._first_usable_resource_key = lambda *args, **kwargs: (_ for _ in ()).throw(
+        RuntimeError("no RDMA")
+    )
+    monkeypatch.setattr(peer_agent_mod, "_NVLinkEndpoint", object)
+
+    with pytest.raises(RuntimeError, match="TCP fallback is disabled"):
+        agent._auto_transport_keys("peer", None, None, 1)
+
+
+def test_peer_connection_exposes_selection_reason():
+    import threading
+
+    agent = object.__new__(PeerAgent)
+    agent._shutdown_called = True
+    agent.alias = "local"
+    agent._connections_lock = threading.Lock()
+    local_key = RdmaResourceKey("local_nic", 1, "IB")
+    peer_key = RdmaResourceKey("peer_nic", 1, "IB")
+    directed = DirectedConnection(
+        agent,
+        "peer",
+        local_key,
+        peer_key,
+        1,
+        selection_reason="compatible_rdma_fallback",
+    )
+    agent._connections = {directed.conn_id: directed}
+
+    connection = PeerConnection(agent, directed.conn_id)
+
+    assert connection.transport == "rdma"
+    assert connection.selection_reason == "compatible_rdma_fallback"

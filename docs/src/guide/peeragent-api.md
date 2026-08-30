@@ -75,6 +75,7 @@ conn.wait(timeout=60)
 | `local_nic` / `remote_nic` | Selected local and remote NICs.                                            |
 | `state`                    | Connection state such as `connecting`, `connected`, or `failed`.           |
 | `transport`                | Selected transport: `nvlink`, `rdma`, or `tcp`.                            |
+| `selection_reason`         | Stable reason for an explicit or automatic selection.                      |
 | `endpoint`                 | Underlying transport endpoint once created.                                |
 | `peer_endpoint_info`       | Peer's `endpoint_info` dict captured during handshake (TCP one-sided ops). |
 
@@ -82,7 +83,11 @@ conn.wait(timeout=60)
 
 `connect_to(transport=...)` picks the underlying transport. RDMA remains the
 default for compatibility. Pass `transport="nvlink"` to use CUDA Fabric between
-MNNVL peers, or `transport="tcp"` to bind a `TcpEndpoint` explicitly. See
+MNNVL peers, or `transport="tcp"` to bind a `TcpEndpoint` explicitly. Services
+that may run on either an MNNVL Fabric or an RDMA cluster can request
+`transport="auto"`. Auto selects NVLink for matching MNNVL membership and a
+common IMEX channel, otherwise compatible RDMA, otherwise fails. It never
+silently falls back to TCP. See
 [TCP Transport](tcp-transport.md) for the full TCP flow, the
 `local_host`/`local_port` kwargs, and one-sided I/O over TCP.
 
@@ -100,6 +105,11 @@ conn = agent.connect_to("worker-b", transport="nvlink")
 conn.sync_memory_regions(timeout=60)
 conn.wait(timeout=60)
 assert conn.transport == "nvlink"
+assert conn.selection_reason == "explicit_request"
+
+# The same MNNVL connection can be selected by policy.
+auto_conn = agent.connect_to("worker-c", transport="auto")
+assert auto_conn.selection_reason == "matching_mnnvl_fabric"
 ```
 
 `local_device` and `peer_device` accept a process-visible CUDA ordinal, GPU

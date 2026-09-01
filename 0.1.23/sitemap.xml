@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/api_reference/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/api_reference/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/api_reference/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/installation/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/installation/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/installation/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/quickstart/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/quickstart/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/roadmap/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/roadmap/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/roadmap/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/versions/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/versions/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/versions/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/design/architecture/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/design/architecture/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/design/architecture/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/design/dlslime-cache/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/design/dlslime-cache/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/design/dlslime-cache/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/design/endpoint-device-signal-refactor/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/design/endpoint-device-signal-refactor/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/design/endpoint-device-signal-refactor/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/design/endpoint-ownership-model/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/design/endpoint-ownership-model/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/design/endpoint-ownership-model/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/guide/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/benchmark-rpc/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/benchmark-rpc/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/guide/benchmark-rpc/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/deployment/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/deployment/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/guide/deployment/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/dlslime-cache/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/dlslime-cache/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/guide/dlslime-cache/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/endpoint-api/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/endpoint-api/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/guide/endpoint-api/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/peeragent-api/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/peeragent-api/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/guide/peeragent-api/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/slimerpc/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/slimerpc/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/guide/slimerpc/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/tcp-transport/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/guide/tcp-transport/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/guide/tcp-transport/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/platform/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/platform/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/platform/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/platform/huawei-ascend/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/platform/huawei-ascend/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23zh/platform/huawei-ascend/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/api_reference/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/api_reference/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23api_reference/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/installation/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/installation/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23installation/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/quickstart/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23quickstart/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/roadmap/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/roadmap/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23roadmap/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/versions/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/versions/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23versions/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/design/architecture/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/design/architecture/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23design/architecture/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/design/dlslime-cache/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/design/dlslime-cache/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23design/dlslime-cache/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/design/endpoint-device-signal-refactor/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/design/endpoint-device-signal-refactor/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23design/endpoint-device-signal-refactor/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/design/endpoint-ownership-model/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/design/endpoint-ownership-model/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23design/endpoint-ownership-model/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23guide/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/benchmark-rpc/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/benchmark-rpc/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23guide/benchmark-rpc/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/deployment/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/deployment/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23guide/deployment/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/dlslime-cache/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/dlslime-cache/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23guide/dlslime-cache/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/endpoint-api/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/endpoint-api/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23guide/endpoint-api/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/peeragent-api/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/peeragent-api/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23guide/peeragent-api/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/slimerpc/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/slimerpc/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23guide/slimerpc/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/tcp-transport/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/guide/tcp-transport/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23guide/tcp-transport/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/platform/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/platform/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23platform/"/>
+    </url>
+    <url>
+        <loc>https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/platform/huawei-ascend/</loc>
+        <lastmod>2026-09-01</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://jimyma.nano-infra.com/DLSlime/0.1.23/zh/platform/huawei-ascend/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://jimyma.nano-infra.com/DLSlime/0.1.23platform/huawei-ascend/"/>
+    </url>
+</urlset>

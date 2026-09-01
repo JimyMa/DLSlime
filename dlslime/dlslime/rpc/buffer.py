@@ -1,13 +1,20 @@
-"""GrowableBuffer — RDMA-registered pinned buffer with auto-resize."""
+"""GrowableBuffer — RDMA-registered host buffer with auto-resize."""
 
 import torch
 
 
 class GrowableBuffer:
-    """Pinned CPU buffer that doubles when capacity is exceeded.
+    """RDMA-registered CPU buffer that doubles when capacity is exceeded.
 
     On resize the old MR stays registered (handles are monotonic in
     DLSlime) and a new MR is created for the larger buffer.
+
+    Use the regular CPU allocator here, not ``torch``'s ``pin_memory``
+    allocator. The RDMA registration below pins the host pages needed by the
+    transport. ``pin_memory=True`` would additionally invoke the CUDA host
+    allocator and initialize the CUDA driver, even though these RPC buffers
+    never participate in CPU-to-GPU copies. In particular, that makes a
+    host-only DLSLime driver fail when it runs in a forked process.
     """
 
     def __init__(
@@ -21,7 +28,7 @@ class GrowableBuffer:
         self._endpoint = endpoint
         self._name = name
         self.handler: int = -1  # MR handler id from RDMA registration
-        self._buf = torch.empty(initial_size, dtype=torch.int8, pin_memory=True)
+        self._buf = torch.empty(initial_size, dtype=torch.int8)
         self._register()
 
     # ── Public ───────────────────────────────────────
@@ -39,7 +46,7 @@ class GrowableBuffer:
         if needed <= self._buf.numel():
             return
         new_size = max(needed, self._buf.numel() * 2)
-        self._buf = torch.empty(new_size, dtype=torch.int8, pin_memory=True)
+        self._buf = torch.empty(new_size, dtype=torch.int8)
         self._register()
 
     # ── Internal ─────────────────────────────────────

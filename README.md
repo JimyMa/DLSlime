@@ -268,18 +268,18 @@ cmake --build build
 
 ### Build Flags
 
-| Flag                  |                                  Default | Description                                            |
-| --------------------- | ---------------------------------------: | ------------------------------------------------------ |
-| `BUILD_RDMA`          |                                     `ON` | Build the RDMA transfer engine                         |
-| `BUILD_TCP`           |                                     `ON` | Build the TCP transfer engine (fallback transport)     |
-| `BUILD_PYTHON`        | `OFF` in CMake, `ON` in `pyproject.toml` | Build Python bindings                                  |
-| `BUILD_NVLINK`        |                                    `OFF` | Build the NVLink transfer engine                       |
-| `BUILD_ASCEND_DIRECT` |                                    `OFF` | Build Ascend Direct transport                          |
-| `BUILD_TORCH_PLUGIN`  |                                    `OFF` | Build DLSlime as a torch backend                       |
-| `BUILD_BENCH`         |                                    `OFF` | Build C++ transfer-engine benchmarks                   |
-| `BUILD_TEST`          |                                    `OFF` | Build C++ tests                                        |
+| Flag                  |                                                 Default | Description                                                |
+| --------------------- | ------------------------------------------------------: | ---------------------------------------------------------- |
+| `BUILD_RDMA`          |                                                    `ON` | Build the RDMA transfer engine                             |
+| `BUILD_TCP`           |                                                    `ON` | Build the TCP transfer engine (fallback transport)         |
+| `BUILD_PYTHON`        |                `OFF` in CMake, `ON` in `pyproject.toml` | Build Python bindings                                      |
+| `BUILD_NVLINK`        |                                                   `OFF` | Build the NVLink transfer engine                           |
+| `BUILD_ASCEND_DIRECT` |                                                   `OFF` | Build Ascend Direct transport                              |
+| `BUILD_TORCH_PLUGIN`  |                                                   `OFF` | Build DLSlime as a torch backend                           |
+| `BUILD_BENCH`         |                                                   `OFF` | Build C++ transfer-engine benchmarks                       |
+| `BUILD_TEST`          |                                                   `OFF` | Build C++ tests                                            |
 | `BUILD_TOPO_CUDA`     | `ON` with `USE_CUDA` or `BUILD_NVLINK`; otherwise `OFF` | Build optional CUDA/NVML topology discovery (CUDA >= 13.0) |
-| `USE_MACA`            |                                    `OFF` | Enable Metax platform support for torch backend builds |
+| `USE_MACA`            |                                                   `OFF` | Enable Metax platform support for torch backend builds     |
 
 ## Benchmarks
 

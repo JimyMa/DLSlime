@@ -23,7 +23,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from p2p_rdma_dmabuf_cross_process import CudaDriver, _recv_fd, _send_fd
+from p2p_rdma_dmabuf_cross_process import _recv_fd, _send_fd, CudaDriver
 
 
 def _connect(path: str, timeout: float = 10.0) -> socket.socket:
@@ -64,7 +64,9 @@ def _destination(args: argparse.Namespace) -> int:
         device=f"cuda:{args.destination_cuda_device}",
     )
     torch.cuda.synchronize(args.destination_cuda_device)
-    fd, metadata = _export_tensor(destination, args.destination_cuda_device, "destination")
+    fd, metadata = _export_tensor(
+        destination, args.destination_cuda_device, "destination"
+    )
 
     with _connect(args.socket) as sock:
         try:
@@ -220,7 +222,9 @@ def _source(args: argparse.Namespace) -> int:
         ]
         if args.rdma_device:
             common.extend(["--rdma-device", args.rdma_device])
-        agent = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--agent", *common])
+        agent = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), "--agent", *common]
+        )
         destination = subprocess.Popen(
             [
                 sys.executable,

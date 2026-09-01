@@ -1,8 +1,7 @@
 import threading
 
 import pytest
-from dlslime import RDMAContext, RDMAEndpoint, discover_topology
-from dlslime import _slime_c
+from dlslime import _slime_c, discover_topology, RDMAContext, RDMAEndpoint
 from dlslime.peer_agent import _agent as peer_agent_mod
 from dlslime.peer_agent._agent import DirectedConnection, PeerAgent, RdmaResourceKey
 
@@ -172,9 +171,7 @@ def test_rdma_context_init_defaults_to_automatic_link_type_detection():
 )
 def test_resolve_rdma_link_type_detects_infiniband(requested):
     assert (
-        _slime_c._resolve_rdma_link_type(
-            requested, _slime_c._IBV_LINK_LAYER_INFINIBAND
-        )
+        _slime_c._resolve_rdma_link_type(requested, _slime_c._IBV_LINK_LAYER_INFINIBAND)
         == "IB"
     )
 
@@ -195,9 +192,7 @@ def test_resolve_rdma_link_type_detects_infiniband(requested):
 )
 def test_resolve_rdma_link_type_detects_roce(requested):
     assert (
-        _slime_c._resolve_rdma_link_type(
-            requested, _slime_c._IBV_LINK_LAYER_ETHERNET
-        )
+        _slime_c._resolve_rdma_link_type(requested, _slime_c._IBV_LINK_LAYER_ETHERNET)
         == "RoCE"
     )
 
@@ -216,9 +211,7 @@ def test_resolve_rdma_link_type_rejects_mismatched_override(requested, detected)
 
 def test_resolve_rdma_link_type_rejects_invalid_input():
     with pytest.raises(ValueError, match="expected auto, IB, or RoCE"):
-        _slime_c._resolve_rdma_link_type(
-            "tcp", _slime_c._IBV_LINK_LAYER_ETHERNET
-        )
+        _slime_c._resolve_rdma_link_type("tcp", _slime_c._IBV_LINK_LAYER_ETHERNET)
 
 
 def test_resolve_rdma_link_type_rejects_unknown_hardware_layer():

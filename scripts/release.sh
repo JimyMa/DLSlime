@@ -63,6 +63,26 @@ fi
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
+MANIFESTS=(
+  "dlslime/pyproject.toml"
+  "dlslime-ctrl/pyproject.toml"
+  "docs/pyproject.toml"
+  "dlslime-ctrl/Cargo.toml"
+)
+
+DOCS=(
+  "docker/README.md"
+  "docker/.env.example"
+  "docker/docker-compose.yml"
+  ".github/workflows/docker-publish.yml"
+)
+
+RELEASE_FILES=(
+  "${MANIFESTS[@]}"
+  "dlslime-ctrl/Cargo.lock"
+  "${DOCS[@]}"
+)
+
 # --- discover current version -------------------------------------------------
 
 OLD="$(grep -E '^version = "' dlslime/pyproject.toml | head -1 | sed -E 's/version = "([^"]+)"/\1/')"
@@ -78,43 +98,43 @@ fi
 
 echo "Bumping: $OLD  ->  $NEW"
 
-# --- working tree must be clean ----------------------------------------------
+# --- release inputs must be clean --------------------------------------------
 
-if [[ "$DRY_RUN" -eq 0 ]] && ! git diff --quiet; then
-  echo "ERROR: working tree has unstaged changes. Commit or stash first." >&2
+if ! git diff --quiet -- "${RELEASE_FILES[@]}"; then
+  echo "ERROR: release files have unstaged changes. Commit or stash them first." >&2
   exit 1
 fi
-if [[ "$DRY_RUN" -eq 0 ]] && ! git diff --cached --quiet; then
-  echo "ERROR: working tree has staged but uncommitted changes." >&2
+if ! git diff --cached --quiet; then
+  echo "ERROR: the index has staged changes. Commit or unstage them first." >&2
   exit 1
 fi
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "ERROR: cargo is required to refresh dlslime-ctrl/Cargo.lock." >&2
+  exit 1
+fi
+
+restore_release_files() {
+  git restore --worktree -- "${RELEASE_FILES[@]}"
+}
 
 # --- 1. authoritative manifests ----------------------------------------------
-
-MANIFESTS=(
-  "dlslime/pyproject.toml"
-  "dlslime-ctrl/pyproject.toml"
-  "docs/pyproject.toml"
-  "dlslime-ctrl/Cargo.toml"
-)
 
 for f in "${MANIFESTS[@]}"; do
   if [[ ! -f "$f" ]]; then
     echo "WARN: skipping missing manifest $f" >&2
     continue
   fi
-  # Anchor on `^version = "..."` (column 0) — safe for pyproject [project] tables
-  # and Cargo [package] tables alike. Won't touch dep specs which are quoted differently.
-  sed -i -E "0,/^version = \"[^\"]+\"$/s//version = \"$NEW\"/" "$f"
+  # Anchor on `^version = "..."` (column 0) — safe for pyproject [project]
+  # and Cargo [package] tables alike. Perl's in-place mode is portable across
+  # GNU/Linux and macOS, unlike `sed -i`.
+  RELEASE_NEW_VERSION="$NEW" perl -0pi -e \
+    's/^version = "[^"]+"$/version = "$ENV{RELEASE_NEW_VERSION}"/m' "$f"
 done
 
 # --- 2. refresh Cargo.lock ----------------------------------------------------
 
-if command -v cargo >/dev/null 2>&1; then
-  (cd dlslime-ctrl && cargo update -p dlslime-ctrl >/dev/null)
-else
-  echo "WARN: cargo not in PATH — Cargo.lock NOT refreshed; CI will be inconsistent" >&2
-fi
+(cd dlslime-ctrl && cargo update -p dlslime-ctrl >/dev/null)
 
 # --- 3. doc references --------------------------------------------------------
 
@@ -122,38 +142,25 @@ fi
 # *exact* old version. Using literal match to avoid touching e.g. clap "0.1.1"
 # in Cargo.lock (which is already handled by cargo update above).
 
-DOCS=(
-  "docker/README.md"
-  "docker/.env.example"
-  "docker/docker-compose.yml"
-  ".github/workflows/docker-publish.yml"
-)
-
-# Old major.minor (e.g. 0.1) — used in some doc examples
-OLD_MM="${OLD%.*}"
-NEW_MM="${NEW%.*}"
-
 for f in "${DOCS[@]}"; do
   [[ -f "$f" ]] || continue
-  # Escape dots in OLD for sed
-  esc_old="${OLD//./\\.}"
-  sed -i "s/${esc_old}/${NEW}/g" "$f"
-  # Also bump "v<OLD>" mentions just in case
-  sed -i "s/v${esc_old}/v${NEW}/g" "$f"
+  RELEASE_OLD_VERSION="$OLD" RELEASE_NEW_VERSION="$NEW" perl -pi -e \
+    's/\Q$ENV{RELEASE_OLD_VERSION}\E/$ENV{RELEASE_NEW_VERSION}/g' "$f"
 done
 
 # --- 4. preview ---------------------------------------------------------------
 
 echo
 echo "=== diff stat ==="
-git --no-pager diff --stat
+git --no-pager diff --stat -- "${RELEASE_FILES[@]}"
 echo
 echo "=== full diff ==="
-git --no-pager diff
+git --no-pager diff -- "${RELEASE_FILES[@]}"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
+  restore_release_files
   echo
-  echo "[dry-run] No git operations performed. Run 'git checkout .' to discard."
+  echo "[dry-run] Preview complete; release files were restored."
   exit 0
 fi
 
@@ -163,12 +170,12 @@ echo
 read -r -p "Commit, tag v$NEW, and push? [y/N] " ans
 case "$ans" in
   y|Y|yes|YES) ;;
-  *) echo "Aborted. Changes left in working tree."; exit 1 ;;
+  *) restore_release_files; echo "Aborted. Release files restored."; exit 1 ;;
 esac
 
 # --- 6. commit + tag + push ---------------------------------------------------
 
-git add -A
+git add -- "${RELEASE_FILES[@]}"
 git commit -m "release: v$NEW"
 git tag -a "v$NEW" -m "Release v$NEW"
 

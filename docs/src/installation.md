@@ -12,7 +12,7 @@ you need optional transports or local C++ changes.
 ## From Source
 
 ```bash
-git clone https://github.com/DeepLink-org/DLSlime.git
+git clone https://github.com/JimyMa/DLSlime.git
 cd DLSlime
 pip install -v --no-build-isolation -e dlslime
 pip install -e dlslime-ctrl                 # optional: Rust control plane

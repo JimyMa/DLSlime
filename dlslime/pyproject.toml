@@ -41,8 +41,8 @@ dependencies = [
 dlslime-cache = "dlslime.cache.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/DeepLink-org/DLSlime.git"
-Repository = "https://github.com/DeepLink-org/DLSlime.git"
+Homepage = "https://github.com/JimyMa/DLSlime.git"
+Repository = "https://github.com/JimyMa/DLSlime.git"
 
 [tool.scikit-build]
 # optional env variable:

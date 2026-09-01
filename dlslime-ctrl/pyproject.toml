@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/DeepLink-org/DLSlime"
+Repository = "https://github.com/JimyMa/DLSlime"
 
 [tool.maturin]
 bindings = "bin"

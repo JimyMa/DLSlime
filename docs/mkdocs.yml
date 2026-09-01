@@ -1,10 +1,10 @@
 site_name: DLSlime
 site_description: Composable and embeddable communication runtime for AI services
-site_url: https://deeplink-org.github.io/DLSlime/
+site_url: https://jimyma.github.io/DLSlime/
 docs_dir: src
 
-repo_name: DeepLink-org/DLSlime
-repo_url: https://github.com/DeepLink-org/DLSlime
+repo_name: JimyMa/DLSlime
+repo_url: https://github.com/JimyMa/DLSlime
 
 theme:
   name: material
@@ -144,7 +144,7 @@ extra:
     default: latest
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/DeepLink-org/DLSlime
+      link: https://github.com/JimyMa/DLSlime
 
 extra_css:
   - assets/stylesheets/dlslime.css

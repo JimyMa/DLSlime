@@ -1,6 +1,6 @@
 # dlslime
 
-The data-plane Python package of [DLSlime](https://github.com/DeepLink-org/DLSlime).
+The data-plane Python package of [DLSlime](https://github.com/JimyMa/DLSlime).
 
 This wheel bundles:
 

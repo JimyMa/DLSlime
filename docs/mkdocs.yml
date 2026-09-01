@@ -1,6 +1,6 @@
 site_name: DLSlime
 site_description: Composable and embeddable communication runtime for AI services
-site_url: https://jimyma.github.io/DLSlime/
+site_url: https://jimyma.nano-infra.com/DLSlime/
 docs_dir: src
 
 repo_name: JimyMa/DLSlime

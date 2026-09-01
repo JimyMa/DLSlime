@@ -94,6 +94,8 @@ jobs:
             --exclude libibumad.so.3
             --exclude libefa.so.1
             --exclude lib_slime_topology.so
+            --exclude lib_slime_topo_core.so
+            --exclude lib_slime_topo_sysfs.so
             --exclude lib_slime_engine.so
             --exclude lib_slime_device.so
             --exclude lib_slime_obs.so

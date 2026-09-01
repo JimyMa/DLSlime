@@ -6,15 +6,6 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
-    inputs:
-      run_rdma_tests:
-        description: Run RDMA/CUDA tests on the self-hosted runner
-        required: true
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
 
 permissions:
   contents: read
@@ -89,11 +80,10 @@ jobs:
 
   rdma-tests:
     name: RDMA tests
-    if: >
-      (github.event_name == 'workflow_dispatch' &&
-       inputs.run_rdma_tests == 'true') ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository)
+    # Disabled until a repository-level runner with the `linux` and `rdma`
+    # labels is available again. Keep the job definition below so it can be
+    # re-enabled without rebuilding the runner setup from scratch.
+    if: ${{ false }}
     runs-on: [self-hosted, linux, rdma]
     environment: self-hosted-rdma
     timeout-minutes: 60

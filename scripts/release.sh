@@ -20,7 +20,7 @@
 #   6. Shows `git diff --stat`, asks for confirmation, then commits + tags + pushes.
 #
 # After the push the existing GH Actions workflow takes over:
-#   - tag v<NEW> -> docker-publish.yml -> ghcr.io/deeplink-org/dlslime-ctrl:<NEW>
+#   - tag v<NEW> -> docker-publish.yml -> ghcr.io/jimyma/dlslime-ctrl:<NEW>
 
 set -euo pipefail
 
@@ -179,10 +179,10 @@ if [[ "$PUSH" -eq 1 ]]; then
   echo "✓ Pushed commit + tag v$NEW"
   echo
   echo "Track the docker build:"
-  echo "  https://github.com/DeepLink-org/DLSlime/actions/workflows/docker-publish.yml"
+  echo "  https://github.com/JimyMa/DLSlime/actions/workflows/docker-publish.yml"
   echo
   echo "After it goes green, the image will be available at:"
-  echo "  ghcr.io/deeplink-org/dlslime-ctrl:$NEW"
+  echo "  ghcr.io/jimyma/dlslime-ctrl:$NEW"
 else
   echo
   echo "✓ Committed and tagged v$NEW locally. Push when ready:"

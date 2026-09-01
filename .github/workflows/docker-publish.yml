@@ -7,7 +7,7 @@
 #
 # No external secrets needed — uses the built-in GITHUB_TOKEN for auth.
 # After the first successful run, go to:
-#   https://github.com/orgs/DeepLink-org/packages/container/dlslime-ctrl/settings
+#   https://github.com/users/JimyMa/packages/container/dlslime-ctrl/settings
 # and set the package visibility to "Public" so anonymous `docker pull` works.
 
 name: docker-publish
@@ -33,9 +33,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  # GHCR requires lowercase. ${{ github.repository_owner }} = "DeepLink-org",
-  # so we explicitly lower-case it via the `tolower` toy below.
-  IMAGE_NAME: deeplink-org/dlslime-ctrl
+  # GHCR image names must be lowercase even though the GitHub owner is JimyMa.
+  IMAGE_NAME: jimyma/dlslime-ctrl
 
 jobs:
   publish:

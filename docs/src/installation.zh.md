@@ -11,7 +11,7 @@ PyPI 包使用默认 CMake 选项构建。如果需要可选传输后端或本�
 ## 从源码安装
 
 ```bash
-git clone https://github.com/DeepLink-org/DLSlime.git
+git clone https://github.com/JimyMa/DLSlime.git
 cd DLSlime
 pip install -v --no-build-isolation -e dlslime
 pip install -e dlslime-ctrl                 # 可选：Rust 控制面

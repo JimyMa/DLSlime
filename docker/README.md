@@ -92,7 +92,7 @@ docker compose -f docker/docker-compose.yml down -v
 
 ## Publishing to GitHub Container Registry (GHCR)
 
-Published image: [`ghcr.io/deeplink-org/dlslime-ctrl`](https://github.com/orgs/DeepLink-org/packages/container/package/dlslime-ctrl).
+Published image: [`ghcr.io/jimyma/dlslime-ctrl`](https://github.com/users/JimyMa/packages/container/package/dlslime-ctrl).
 
 Why GHCR rather than Docker Hub:
 
@@ -104,7 +104,7 @@ Why GHCR rather than Docker Hub:
 
 ```bash
 cat >> docker/.env <<'EOF'
-DLSLIME_CTRL_IMAGE=ghcr.io/deeplink-org/dlslime-ctrl:0.1.22
+DLSLIME_CTRL_IMAGE=ghcr.io/jimyma/dlslime-ctrl:0.1.22
 DLSLIME_CTRL_PULL_POLICY=missing
 EOF
 
@@ -132,7 +132,7 @@ The workflow [`.github/workflows/docker-publish.yml`](../.github/workflows/docke
 
 One-time setup after the **first** successful workflow run, in the GitHub UI:
 
-1. Go to <https://github.com/orgs/DeepLink-org/packages/container/dlslime-ctrl/settings>
+1. Go to <https://github.com/users/JimyMa/packages/container/dlslime-ctrl/settings>
 2. **Danger Zone → Change visibility → Public** — otherwise anonymous `docker pull` will 404.
 3. (Optional) Link the package to the repo so it shows up on the repo sidebar.
 
@@ -166,9 +166,9 @@ VERSION=0.1.22
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
     -f docker/ctrl.Dockerfile \
-    -t ghcr.io/deeplink-org/dlslime-ctrl:${VERSION} \
-    -t ghcr.io/deeplink-org/dlslime-ctrl:0.1 \
-    -t ghcr.io/deeplink-org/dlslime-ctrl:latest \
+    -t ghcr.io/jimyma/dlslime-ctrl:${VERSION} \
+    -t ghcr.io/jimyma/dlslime-ctrl:0.1 \
+    -t ghcr.io/jimyma/dlslime-ctrl:latest \
     --push .
 ```
 

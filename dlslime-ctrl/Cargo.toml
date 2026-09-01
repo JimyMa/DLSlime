@@ -4,7 +4,7 @@ version = "0.1.22"
 edition = "2021"
 description = "DLSlime control plane server"
 license = "MIT"
-repository = "https://github.com/DeepLink-org/DLSlime"
+repository = "https://github.com/JimyMa/DLSlime"
 
 [[bin]]
 name = "dlslime-ctrl"

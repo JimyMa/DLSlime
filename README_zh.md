@@ -221,17 +221,17 @@ cmake --build build
 
 ### 构建选项
 
-| Flag                  |                                       默认值 | 说明                                     |
-| --------------------- | -------------------------------------------: | ---------------------------------------- |
-| `BUILD_RDMA`          |                                         `ON` | 构建 RDMA 传输引擎                       |
-| `BUILD_PYTHON`        | CMake 中为 `OFF`，`pyproject.toml` 中为 `ON` | 构建 Python bindings                     |
-| `BUILD_NVLINK`        |                                        `OFF` | 构建 NVLink 传输引擎                     |
-| `BUILD_ASCEND_DIRECT` |                                        `OFF` | 构建 Ascend Direct 传输                  |
-| `BUILD_TORCH_PLUGIN`  |                                        `OFF` | 构建 DLSlime torch backend               |
-| `BUILD_BENCH`         |                                        `OFF` | 构建 C++ 传输引擎 benchmark              |
-| `BUILD_TEST`          |                                        `OFF` | 构建 C++ 测试                            |
+| Flag                  |                                                   默认值 | 说明                                        |
+| --------------------- | -------------------------------------------------------: | ------------------------------------------- |
+| `BUILD_RDMA`          |                                                     `ON` | 构建 RDMA 传输引擎                          |
+| `BUILD_PYTHON`        |             CMake 中为 `OFF`，`pyproject.toml` 中为 `ON` | 构建 Python bindings                        |
+| `BUILD_NVLINK`        |                                                    `OFF` | 构建 NVLink 传输引擎                        |
+| `BUILD_ASCEND_DIRECT` |                                                    `OFF` | 构建 Ascend Direct 传输                     |
+| `BUILD_TORCH_PLUGIN`  |                                                    `OFF` | 构建 DLSlime torch backend                  |
+| `BUILD_BENCH`         |                                                    `OFF` | 构建 C++ 传输引擎 benchmark                 |
+| `BUILD_TEST`          |                                                    `OFF` | 构建 C++ 测试                               |
 | `BUILD_TOPO_CUDA`     | `USE_CUDA` 或 `BUILD_NVLINK` 开启时为 `ON`，否则为 `OFF` | 构建可选 CUDA/NVML 拓扑探测（CUDA >= 13.0） |
-| `USE_MACA`            |                                        `OFF` | 为 torch backend 构建启用 Metax 平台支持 |
+| `USE_MACA`            |                                                    `OFF` | 为 torch backend 构建启用 Metax 平台支持    |
 
 ## Benchmark
 

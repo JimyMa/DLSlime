@@ -135,7 +135,10 @@ nav:
       - Huawei Ascend: platform/huawei-ascend.md
   - API Reference: api_reference.md
   - Versions: versions.md
-  - Roadmap: roadmap.md
+  - Roadmap:
+      - Overview: roadmap/index.md
+      - 2026-09 to 2026-11: roadmap/2026_09-2026_11.md
+      - 2025 Q3: roadmap/2025_Q3.md
 
 extra:
   generator: false
